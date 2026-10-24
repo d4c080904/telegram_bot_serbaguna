@@ -25,14 +25,15 @@ bot.set_my_commands([
     BotCommand("stats", "📊 Statistik pemakaian lu"),
 ])
 
-# IMPORT SEMUA HANDLERS DI SINI (Wajib agar tereksekusi)
+# IMPORT SEMUA HANDLERS DI SINI
 import handlers.start
 import handlers.chat
 import handlers.gym
+import handlers.calorie
 import handlers.downloader
 import handlers.router
 
 if __name__ == "__main__":
     setup_db()
-    logger.info("🚀 Bot Full Power V10 (Modular) berhasil jalan!")
+    logger.info("🚀 Bot Full Power V11 (Kalori Tracker) berhasil jalan!")
     bot.infinity_polling()

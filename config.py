@@ -20,12 +20,14 @@ RATE_LIMIT_WINDOW = 60
 CHAT_HISTORY_LIMIT = 20
 CHAT_MAX_MESSAGES = 40
 
+# Update daftar model biar ga error
 PRIORITAS_MODEL = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-70b-versatile",
-    "llama-3.3-70b-specdec",
     "llama-3.1-8b-instant",
-    "gemma2-9b-it",
+    "llama-3.1-70b-versatile",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
+    "mixtral-8x7b-32768",
+    "openai/gpt-oss-120b"
 ]
 
 BROWSER_HEADERS = {

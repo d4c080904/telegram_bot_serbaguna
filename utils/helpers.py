@@ -36,3 +36,26 @@ def kategori_bmi(bmi):
     elif bmi < 25: return "Normal"
     elif bmi < 30: return "Overweight"
     else: return "Obesitas"
+
+# --- FUNGSI KALORI TRACKER ---
+
+def hitung_bmr_tdee(umur, berat, tinggi, jenis_kelamin, target, frekuensi_latihan):
+    try:
+        if jenis_kelamin == 'L':
+            bmr = (10 * float(berat)) + (6.25 * float(tinggi)) - (5 * int(umur)) + 5
+        else:
+            bmr = (10 * float(berat)) + (6.25 * float(tinggi)) - (5 * int(umur)) - 161
+        
+        if frekuensi_latihan <= 1: multiplier = 1.2
+        elif frekuensi_latihan <= 3: multiplier = 1.375
+        elif frekuensi_latihan <= 5: multiplier = 1.55
+        else: multiplier = 1.725
+        
+        tdee = bmr * multiplier
+        
+        if target == 'cutting': batas_kalori = tdee - 500
+        elif target == 'bulking': batas_kalori = tdee + 500
+        else: batas_kalori = tdee
+            
+        return int(batas_kalori)
+    except Exception: return 2000

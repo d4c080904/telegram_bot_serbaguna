@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import datetime
 from database.db import get_db
 from config import CHAT_HISTORY_LIMIT, CHAT_MAX_MESSAGES
 
@@ -92,11 +93,46 @@ def get_gym_profile(user_id):
 def save_gym_profile(user_id, data):
     try:
         conn = get_db(); c = conn.cursor()
-        # Ganti ON CONFLICT jadi INSERT OR REPLACE
-        c.execute('''INSERT OR REPLACE INTO gym_profile 
-        (user_id, mode, umur, berat, tinggi, jenis_kelamin, target, level, pengalaman, frekuensi, alat, updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)''', 
-        (str(user_id), data.get('mode', 'noob'), data.get('umur'), data.get('berat'), data.get('tinggi'), data.get('jenis_kelamin'), data.get('target'), data.get('level'), data.get('pengalaman'), data.get('frekuensi'), data.get('alat')))
+        c.execute('''INSERT OR REPLACE INTO gym_profile (user_id, mode, umur, berat, tinggi, jenis_kelamin, target, level, pengalaman, frekuensi, alat, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)''', (str(user_id), data.get('mode', 'noob'), data.get('umur'), data.get('berat'), data.get('tinggi'), data.get('jenis_kelamin'), data.get('target'), data.get('level'), data.get('pengalaman'), data.get('frekuensi'), data.get('alat')))
         conn.commit(); conn.close(); return True
     except Exception as e:
         logger.error(f"save_gym_profile error: {e}"); return False
+
+# --- FUNGSI KALORI TRACKER ---
+
+def tambah_food_log(user_id, nama, porsi, kalori, protein, karbo, lemak):
+    try:
+        conn = get_db(); c = conn.cursor()
+        tanggal_ini = datetime.date.today().isoformat()
+        c.execute('''INSERT INTO food_logs (user_id, tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', (str(user_id), tanggal_ini, nama, porsi, int(kalori), float(protein), float(karbo), float(lemak)))
+        conn.commit(); conn.close(); return True
+    except Exception as e:
+        logger.error(f"tambah_food_log error: {e}"); return False
+
+def get_total_kalori_hari_ini(user_id):
+    try:
+        conn = get_db(); c = conn.cursor()
+        tanggal_ini = datetime.date.today().isoformat()
+        c.execute("SELECT SUM(kalori) FROM food_logs WHERE user_id = ? AND tanggal = ?", (str(user_id), tanggal_ini))
+        total = c.fetchone()[0]
+        conn.close(); return total if total else 0
+    except Exception as e:
+        logger.error(f"get_total_kalori error: {e}"); return 0
+
+def get_history_makanan_hari_ini(user_id):
+    try:
+        conn = get_db(); c = conn.cursor()
+        tanggal_ini = datetime.date.today().isoformat()
+        c.execute("SELECT nama_makanan, estimasi_porsi, kalori FROM food_logs WHERE user_id = ? AND tanggal = ? ORDER BY id ASC", (str(user_id), tanggal_ini))
+        rows = c.fetchall(); conn.close(); return rows
+    except Exception as e:
+        logger.error(f"get_history error: {e}"); return []
+
+def hapus_log_terakhir(user_id):
+    try:
+        conn = get_db(); c = conn.cursor()
+        c.execute('''DELETE FROM food_logs WHERE id = (SELECT id FROM food_logs WHERE user_id = ? ORDER BY id DESC LIMIT 1)''', (str(user_id),))
+        affected = c.rowcount
+        conn.commit(); conn.close(); return affected > 0
+    except Exception as e:
+        logger.error(f"hapus_log_terakhir error: {e}"); return False

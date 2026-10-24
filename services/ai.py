@@ -1,4 +1,6 @@
 import logging
+import base64
+import json
 from bot_instance import groq_client
 from config import PRIORITAS_MODEL
 from database.queries import cache_get, cache_set, buat_cache_key, ambil_chat_history
@@ -9,17 +11,7 @@ logger = logging.getLogger(__name__)
 print("Mengecek daftar model Groq...")
 try:
     daftar_model = groq_client.models.list()
-    
-    # PERBAIKAN: Buang model suara (whisper, orpheus, tts, playht) dan guard
-    semua_model = [
-        m.id for m in daftar_model.data 
-        if "whisper" not in m.id 
-        and "guard" not in m.id 
-        and "orpheus" not in m.id 
-        and "tts" not in m.id
-        and "playht" not in m.id
-    ]
-    
+    semua_model = [m.id for m in daftar_model.data if "whisper" not in m.id and "guard" not in m.id and "orpheus" not in m.id and "tts" not in m.id]
     MODEL_GROQ_LIST = []
     for prioritas in PRIORITAS_MODEL:
         if prioritas in semua_model:
@@ -27,15 +19,14 @@ try:
             semua_model.remove(prioritas)
     MODEL_GROQ_LIST.extend(semua_model)
     
-    # Jaga-jaga kalau list kosong
     if not MODEL_GROQ_LIST:
-        MODEL_GROQ_LIST = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        MODEL_GROQ_LIST = ["llama-3.1-8b-instant"]
         
     logger.info(f"✅ {len(MODEL_GROQ_LIST)} model Groq siap")
     logger.info(f"🥇 Model utama: {MODEL_GROQ_LIST[0]}")
 except Exception as e:
     logger.warning(f"Gagal ambil model Groq: {e}")
-    MODEL_GROQ_LIST = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+    MODEL_GROQ_LIST = ["llama-3.1-8b-instant"]
 
 def perbaiki_teks_dengan_ai(teks):
     key = buat_cache_key("rapih", teks)
@@ -84,12 +75,8 @@ def chat_dengan_ai(user_id, pesan_baru):
     for model_name in MODEL_GROQ_LIST:
         try:
             response = groq_client.chat.completions.create(
-                messages=messages, 
-                model=model_name, 
-                temperature=0.5, 
-                max_tokens=1024,
-                frequency_penalty=0.5,
-                presence_penalty=0.5
+                messages=messages, model=model_name, temperature=0.5, max_tokens=1024,
+                frequency_penalty=0.5, presence_penalty=0.5
             )
             hasil = response.choices[0].message.content.strip()
             if hasil: return hasil
@@ -99,7 +86,6 @@ def chat_dengan_ai(user_id, pesan_baru):
 
 def analisis_gym_noob(umur, berat, tinggi):
     bmi = hitung_bmi(berat, tinggi); kategori = kategori_bmi(bmi)
-    
     system_prompt = (
         "Kamu adalah personal trainer berpengalaman yang ramah. "
         "Klien kamu BARU MULAI gym, jelaskan sederhana & gaul. "
@@ -107,52 +93,67 @@ def analisis_gym_noob(umur, berat, tinggi):
         "JANGAN pakai markdown, tulis teks polos. "
         "JANGAN mengulang kata yang sama berkali-kali. Berhenti jika sudah selesai."
     )
-    
     user_prompt = f"Data Klien: {umur}th, {berat}kg, {tinggi}cm, BMI: {bmi} ({kategori}). Kasih panduan: 1. Ringkasan kondisi. 2. Program minggu 1. 3. Tips makan. 4. 3 kesalahan pemula. 5. Motivasi. Max 500 kata."
-    
     for model_name in MODEL_GROQ_LIST:
         try:
             response = groq_client.chat.completions.create(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
-                model=model_name, 
-                temperature=0.5,
-                max_tokens=1500,
-                frequency_penalty=0.5,
-                presence_penalty=0.5
+                model=model_name, temperature=0.5, max_tokens=1500, frequency_penalty=0.5, presence_penalty=0.5
             )
             hasil = response.choices[0].message.content.strip()
             if hasil: return hasil
-        except Exception as e: 
-            logger.warning(f"Gagal (gym noob): {e}")
-            continue
+        except Exception as e: logger.warning(f"Gagal (gym noob): {e}"); continue
     return None
 
 def analisis_gym_pro(data):
     bmi = hitung_bmi(data.get('berat'), data.get('tinggi')); kategori = kategori_bmi(bmi)
     gender_label = "Laki-laki" if data.get('jenis_kelamin') == 'L' else "Perempuan"
     alat_label = {'gym_full': 'Gym lengkap', 'home_dumbbell': 'Rumahan + dumbbell', 'home_barbell': 'Rumahan + barbell', 'bodyweight': 'Bodyweight only'}.get(data.get('alat'), data.get('alat', 'N/A'))
-    
     system_prompt = (
         "Kamu adalah personal trainer elite. Klien kamu sudah pengalaman, jawab detail teknis advanced. "
         "WAJIB pakai bahasa Indonesia gaul (bukan bahasa Melayu). JANGAN pakai markdown. "
         "JANGAN mengulang kata yang sama berkali-kali. Berhenti jika sudah selesai."
     )
-    
     user_prompt = f"Data Pro: {data.get('umur')}th, {data.get('berat')}kg, {data.get('tinggi')}cm, {gender_label}, BMI: {bmi} ({kategori}), Target: {data.get('target')}, Level: {data.get('level')}, Pengalaman: {data.get('pengalaman')}th, Frekuensi: {data.get('frekuensi')}x/mgg, Alat: {alat_label}. Kasih analisis advanced: 1. Analisis komposisi. 2. Split program. 3. Kalori & makro. 4. Saran periodization. 5. Weak point. 6. Suplemen. Max 700 kata."
-    
     for model_name in MODEL_GROQ_LIST:
         try:
             response = groq_client.chat.completions.create(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
-                model=model_name, 
-                temperature=0.5,
-                max_tokens=2000,
-                frequency_penalty=0.5,
-                presence_penalty=0.5
+                model=model_name, temperature=0.5, max_tokens=2000, frequency_penalty=0.5, presence_penalty=0.5
             )
             hasil = response.choices[0].message.content.strip()
             if hasil: return hasil
-        except Exception as e: 
-            logger.warning(f"Gagal (gym pro): {e}")
-            continue
+        except Exception as e: logger.warning(f"Gagal (gym pro): {e}"); continue
     return None
+
+# --- FUNGSI AI VISION (SUDAH DIUPDATE KE MODEL TERBARU) ---
+def analisis_foto_makanan(image_bytes, caption=""):
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    
+    prompt_text = (
+        "Analisis foto makanan ini sebagai ahli gizi. "
+        "Berikan output HANYA format JSON murni dengan key: nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak. "
+        f"Caption dari user: {caption}"
+    )
+    
+    user_content = [
+        {"type": "text", "text": prompt_text},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+    ]
+    
+    # Model Vision resmi Groq saat ini
+    model_vision = "qwen/qwen3.8-27b"
+    
+    try:
+        response = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": user_content}],
+            model=model_vision,
+            temperature=0.2,
+            max_completion_tokens=500,
+            response_format={"type": "json_object"} # Paksa output JSON
+        )
+        hasil = response.choices[0].message.content.strip()
+        return json.loads(hasil)
+    except Exception as e:
+        logger.error(f"Vision API Error: {e}")
+        return None
