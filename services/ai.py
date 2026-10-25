@@ -126,34 +126,52 @@ def analisis_gym_pro(data):
         except Exception as e: logger.warning(f"Gagal (gym pro): {e}"); continue
     return None
 
-# --- FUNGSI AI VISION (SUDAH DIUPDATE KE MODEL TERBARU) ---
 def analisis_foto_makanan(image_bytes, caption=""):
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
-    
     prompt_text = (
         "Analisis foto makanan ini sebagai ahli gizi. "
         "Berikan output HANYA format JSON murni dengan key: nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak. "
         f"Caption dari user: {caption}"
     )
-    
     user_content = [
         {"type": "text", "text": prompt_text},
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
     ]
-    
-    # Model Vision resmi Groq saat ini
     model_vision = "qwen/qwen3.8-27b"
-    
     try:
         response = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": user_content}],
             model=model_vision,
             temperature=0.2,
             max_completion_tokens=500,
-            response_format={"type": "json_object"} # Paksa output JSON
+            response_format={"type": "json_object"}
         )
         hasil = response.choices[0].message.content.strip()
         return json.loads(hasil)
     except Exception as e:
         logger.error(f"Vision API Error: {e}")
+        return None
+
+def koreksi_foto_makanan(koreksi_user):
+    prompt_text = (
+        f"User mengoreksi analisis makanan sebelumnya. Koreksi: '{koreksi_user}'. "
+        "Tugasmu: Ganti HANYA item makanan yang salah koreksi dengan item yang baru. "
+        "JANGAN menghapus item lain yang tidak disebutkan (misal nasi atau sayur tetap dihitung). "
+        "Hitung ulang TOTAL kalori dan makronya secara keseluruhan. "
+        "Berikan output HANYA format JSON murni dengan key: "
+        "nama_makanan (HARUS BERUPA TEKS STRING, BUKAN LIST/ARRAY), estimasi_porsi, kalori, protein, karbo, lemak."
+    )
+    
+    try:
+        response = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt_text}],
+            model="qwen/qwen3.8-27b",
+            temperature=0.2,
+            max_completion_tokens=500,
+            response_format={"type": "json_object"}
+        )
+        hasil = response.choices[0].message.content.strip()
+        return json.loads(hasil)
+    except Exception as e:
+        logger.error(f"Koreksi API Error: {e}")
         return None
