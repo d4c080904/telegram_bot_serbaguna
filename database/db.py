@@ -19,14 +19,9 @@ def migrasi_gym_table():
         kolom_lama = [row[1] for row in c.fetchall()]
 
         kolom_baru = {
-            'mode': "TEXT DEFAULT 'noob'",
-            'umur': "INTEGER",
-            'jenis_kelamin': "TEXT",
-            'level': "TEXT",
-            'pengalaman': "INTEGER",
-            'frekuensi': "INTEGER",
-            'alat': "TEXT",
-            'updated_at': "TEXT" 
+            'mode': "TEXT DEFAULT 'noob'", 'umur': "INTEGER", 'jenis_kelamin': "TEXT",
+            'level': "TEXT", 'pengalaman': "INTEGER", 'frekuensi': "INTEGER",
+            'alat': "TEXT", 'updated_at': "TEXT" 
         }
 
         for nama_kolom, tipe in kolom_baru.items():
@@ -43,7 +38,7 @@ def migrasi_gym_table():
         logger.error(f"migrasi_gym_table error: {e}")
 
 def migrasi_food_logs_table():
-    """Nambahin kolom message_id dan photo_message_id ke food_logs kalau belum ada"""
+    """Migrasi buat nambahin kolom gula"""
     try:
         conn = get_db()
         c = conn.cursor()
@@ -54,9 +49,11 @@ def migrasi_food_logs_table():
             c.execute("ALTER TABLE food_logs ADD COLUMN message_id INTEGER")
         if 'photo_message_id' not in kolom_lama:
             c.execute("ALTER TABLE food_logs ADD COLUMN photo_message_id INTEGER")
+        if 'gula' not in kolom_lama:
+            c.execute("ALTER TABLE food_logs ADD COLUMN gula REAL DEFAULT 0.0")
             
         conn.commit()
-        logger.info("✅ Migrasi: kolom message_id & photo_message_id siap")
+        logger.info("✅ Migrasi: kolom food_logs siap (termasuk gula)")
         conn.close()
     except Exception as e:
         logger.error(f"migrasi_food_logs_table error: {e}")
@@ -85,6 +82,7 @@ def setup_db():
             protein REAL,
             karbo REAL,
             lemak REAL,
+            gula REAL DEFAULT 0.0,
             waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')

@@ -26,7 +26,6 @@ def respon_pesan(pesan):
 
         # --- FITUR KOREKSI KALORI (REPLY TO FIX) ---
         if pesan.reply_to_message:
-            # Cek apakah pesan yang di-reply itu ID foto user atau ID teks bot
             if cek_id_makanan(user_id, pesan.reply_to_message.message_id):
                 bot.send_chat_action(pesan.chat.id, 'typing')
                 pesan_tunggu = bot.reply_to(pesan, "⏳ _Oke bro, AI lagi ngitung ulang kalorinya..._")
@@ -42,7 +41,8 @@ def respon_pesan(pesan):
                         hasil_baru.get('kalori', 0), 
                         hasil_baru.get('protein', 0), 
                         hasil_baru.get('karbo', 0), 
-                        hasil_baru.get('lemak', 0)
+                        hasil_baru.get('lemak', 0),
+                        hasil_baru.get('gula', 0) # <--- TAMBAHAN INI YANG BIKIN ERROR
                     )
                     
                     if berhasil:
@@ -53,7 +53,8 @@ def respon_pesan(pesan):
                             f"🔥 Kalori Baru: *{hasil_baru.get('kalori')} kcal*\n"
                             f"🥩 Protein: *{hasil_baru.get('protein')}g*\n"
                             f"🍚 Karbo: *{hasil_baru.get('karbo')}g*\n"
-                            f"🧈 Lemak: *{hasil_baru.get('lemak')}g*\n",
+                            f"🧈 Lemak: *{hasil_baru.get('lemak')}g*\n"
+                            f"🍭 Gula: *{hasil_baru.get('gula')}g*\n",
                             pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown'
                         )
                         tampil_dashboard_kalori(pesan.chat.id, user_id)
@@ -65,9 +66,8 @@ def respon_pesan(pesan):
                     bot.edit_message_text("❌ AI gagal memproses koreksi.", pesan.chat.id, pesan_tunggu.message_id)
                     return
             
-            # Kalau nge-reply pesan bot tapi bukan hasil scan makanan
             elif pesan.reply_to_message.from_user.id == bot.get_me().id:
-                if "KALORI TRACKER" in (pesan.reply_to_message.text or ""):
+                if "FOOD & SUGAR TRACKER" in (pesan.reply_to_message.text or "") or "KALORI TRACKER" in (pesan.reply_to_message.text or ""):
                     bot.reply_to(pesan, "⚠️ *Pesan yang lu reply itu Dashboard, bukan detail makanannya.*\n\nBiar bisa dikoreksi, tolong reply pesan *Foto Makanan* lu, atau reply pesan *✅ Berhasil Dicatat!* dari bot.", parse_mode='Markdown')
                     return
 

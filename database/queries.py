@@ -96,9 +96,9 @@ def save_gym_profile(user_id, data):
         conn.commit(); conn.close(); return True
     except Exception as e: logger.error(f"save_gym_profile error: {e}"); return False
 
-# --- FUNGSI KALORI TRACKER ---
+# --- FUNGSI KALORI & GULA TRACKER ---
 
-def tambah_food_log(user_id, message_id, photo_message_id, nama, porsi, kalori, protein, karbo, lemak):
+def tambah_food_log(user_id, message_id, photo_message_id, nama, porsi, kalori, protein, karbo, lemak, gula):
     try:
         conn = get_db(); c = conn.cursor()
         tanggal_ini = datetime.date.today().isoformat()
@@ -107,14 +107,12 @@ def tambah_food_log(user_id, message_id, photo_message_id, nama, porsi, kalori, 
         pro = float(parse_number(protein))
         kar = float(parse_number(karbo))
         lem = float(parse_number(lemak))
+        gul = float(parse_number(gula))
         
-        # PENGAMAN: Kalau AI ngasih list, ubah jadi teks
-        if isinstance(nama, list):
-            nama = ", ".join(map(str, nama))
-        else:
-            nama = str(nama)
+        if isinstance(nama, list): nama = ", ".join(map(str, nama))
+        else: nama = str(nama)
             
-        c.execute('''INSERT INTO food_logs (user_id, message_id, photo_message_id, tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (str(user_id), message_id, photo_message_id, tanggal_ini, nama, porsi, kal, pro, kar, lem))
+        c.execute('''INSERT INTO food_logs (user_id, message_id, photo_message_id, tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (str(user_id), message_id, photo_message_id, tanggal_ini, nama, porsi, kal, pro, kar, lem, gul))
         conn.commit(); conn.close(); return True
     except Exception as e: logger.error(f"tambah_food_log error: {e}"); return False
 
@@ -122,12 +120,10 @@ def cek_id_makanan(user_id, reply_msg_id):
     try:
         conn = get_db(); c = conn.cursor()
         c.execute('''SELECT id FROM food_logs WHERE user_id = ? AND (message_id = ? OR photo_message_id = ?)''', (str(user_id), reply_msg_id, reply_msg_id))
-        row = c.fetchone()
-        conn.close()
-        return bool(row)
+        row = c.fetchone(); conn.close(); return bool(row)
     except Exception as e: logger.error(f"cek_id_makanan error: {e}"); return False
 
-def update_food_log(user_id, reply_msg_id, nama, porsi, kalori, protein, karbo, lemak):
+def update_food_log(user_id, reply_msg_id, nama, porsi, kalori, protein, karbo, lemak, gula):
     try:
         conn = get_db(); c = conn.cursor()
         
@@ -135,32 +131,33 @@ def update_food_log(user_id, reply_msg_id, nama, porsi, kalori, protein, karbo, 
         pro = float(parse_number(protein))
         kar = float(parse_number(karbo))
         lem = float(parse_number(lemak))
+        gul = float(parse_number(gula))
         
-        # PENGAMAN: Kalau AI ngasih list, ubah jadi teks
-        if isinstance(nama, list):
-            nama = ", ".join(map(str, nama))
-        else:
-            nama = str(nama)
+        if isinstance(nama, list): nama = ", ".join(map(str, nama))
+        else: nama = str(nama)
             
-        c.execute('''UPDATE food_logs SET nama_makanan=?, estimasi_porsi=?, kalori=?, protein=?, karbo=?, lemak=? WHERE user_id=? AND (message_id=? OR photo_message_id=?)''', (nama, porsi, kal, pro, kar, lem, str(user_id), reply_msg_id, reply_msg_id))
+        c.execute('''UPDATE food_logs SET nama_makanan=?, estimasi_porsi=?, kalori=?, protein=?, karbo=?, lemak=?, gula=? WHERE user_id=? AND (message_id=? OR photo_message_id=?)''', (nama, porsi, kal, pro, kar, lem, gul, str(user_id), reply_msg_id, reply_msg_id))
         affected = c.rowcount
         conn.commit(); conn.close(); return affected > 0
     except Exception as e: logger.error(f"update_food_log error: {e}"); return False
 
-def get_total_kalori_hari_ini(user_id):
+def get_total_makro_hari_ini(user_id):
     try:
         conn = get_db(); c = conn.cursor()
         tanggal_ini = datetime.date.today().isoformat()
-        c.execute("SELECT SUM(kalori) FROM food_logs WHERE user_id = ? AND tanggal = ?", (str(user_id), tanggal_ini))
-        total = c.fetchone()[0]
-        conn.close(); return total if total else 0
-    except Exception as e: logger.error(f"get_total_kalori error: {e}"); return 0
+        c.execute("SELECT SUM(kalori), SUM(gula) FROM food_logs WHERE user_id = ? AND tanggal = ?", (str(user_id), tanggal_ini))
+        row = c.fetchone()
+        conn.close()
+        kalori = row[0] if row[0] else 0
+        gula = row[1] if row[1] else 0
+        return kalori, gula
+    except Exception as e: logger.error(f"get_total_makro error: {e}"); return 0, 0
 
 def get_history_makanan_hari_ini(user_id):
     try:
         conn = get_db(); c = conn.cursor()
         tanggal_ini = datetime.date.today().isoformat()
-        c.execute("SELECT nama_makanan, estimasi_porsi, kalori, waktu FROM food_logs WHERE user_id = ? AND tanggal = ? ORDER BY id ASC", (str(user_id), tanggal_ini))
+        c.execute("SELECT nama_makanan, estimasi_porsi, kalori, gula, waktu FROM food_logs WHERE user_id = ? AND tanggal = ? ORDER BY id ASC", (str(user_id), tanggal_ini))
         rows = c.fetchall(); conn.close(); return rows
     except Exception as e: logger.error(f"get_history error: {e}"); return []
 

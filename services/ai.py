@@ -130,7 +130,8 @@ def analisis_foto_makanan(image_bytes, caption=""):
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
     prompt_text = (
         "Analisis foto makanan ini sebagai ahli gizi. "
-        "Berikan output HANYA format JSON murni dengan key: nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak. "
+        "Berikan output HANYA format JSON murni dengan key: nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula. "
+        "Perkirakan gula (dalam gram) secara realistis, termasuk gula tersembunyi. "
         f"Caption dari user: {caption}"
     )
     user_content = [
@@ -157,9 +158,9 @@ def koreksi_foto_makanan(koreksi_user):
         f"User mengoreksi analisis makanan sebelumnya. Koreksi: '{koreksi_user}'. "
         "Tugasmu: Ganti HANYA item makanan yang salah koreksi dengan item yang baru. "
         "JANGAN menghapus item lain yang tidak disebutkan (misal nasi atau sayur tetap dihitung). "
-        "Hitung ulang TOTAL kalori dan makronya secara keseluruhan. "
+        "Hitung ulang TOTAL kalori, makro, dan gula secara keseluruhan. "
         "Berikan output HANYA format JSON murni dengan key: "
-        "nama_makanan (HARUS BERUPA TEKS STRING, BUKAN LIST/ARRAY), estimasi_porsi, kalori, protein, karbo, lemak."
+        "nama_makanan (HARUS BERUPA TEKS STRING, BUKAN LIST/ARRAY), estimasi_porsi, kalori, protein, karbo, lemak, gula."
     )
     
     try:
