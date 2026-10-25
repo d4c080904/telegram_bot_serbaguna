@@ -38,7 +38,6 @@ def migrasi_gym_table():
         logger.error(f"migrasi_gym_table error: {e}")
 
 def migrasi_food_logs_table():
-    """Migrasi buat nambahin kolom gula"""
     try:
         conn = get_db()
         c = conn.cursor()
@@ -51,9 +50,11 @@ def migrasi_food_logs_table():
             c.execute("ALTER TABLE food_logs ADD COLUMN photo_message_id INTEGER")
         if 'gula' not in kolom_lama:
             c.execute("ALTER TABLE food_logs ADD COLUMN gula REAL DEFAULT 0.0")
+        if 'photo_hash' not in kolom_lama:
+            c.execute("ALTER TABLE food_logs ADD COLUMN photo_hash TEXT")
             
         conn.commit()
-        logger.info("✅ Migrasi: kolom food_logs siap (termasuk gula)")
+        logger.info("✅ Migrasi: kolom food_logs siap (termasuk gula & photo_hash)")
         conn.close()
     except Exception as e:
         logger.error(f"migrasi_food_logs_table error: {e}")
@@ -75,6 +76,7 @@ def setup_db():
             user_id TEXT,
             message_id INTEGER,
             photo_message_id INTEGER,
+            photo_hash TEXT,
             tanggal DATE,
             nama_makanan TEXT,
             estimasi_porsi TEXT,

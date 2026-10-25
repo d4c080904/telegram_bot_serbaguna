@@ -98,7 +98,20 @@ def save_gym_profile(user_id, data):
 
 # --- FUNGSI KALORI & GULA TRACKER ---
 
-def tambah_food_log(user_id, message_id, photo_message_id, nama, porsi, kalori, protein, karbo, lemak, gula):
+def cek_duplikat_foto(user_id, photo_hash):
+    """Cek apakah foto dengan hash ini udah pernah dikirim user hari ini"""
+    try:
+        conn = get_db(); c = conn.cursor()
+        tanggal_ini = datetime.date.today().isoformat()
+        c.execute("SELECT id FROM food_logs WHERE user_id = ? AND photo_hash = ? AND tanggal = ?", (str(user_id), photo_hash, tanggal_ini))
+        row = c.fetchone()
+        conn.close()
+        return bool(row)
+    except Exception as e: 
+        logger.error(f"cek_duplikat_foto error: {e}")
+        return False
+
+def tambah_food_log(user_id, message_id, photo_message_id, photo_hash, nama, porsi, kalori, protein, karbo, lemak, gula):
     try:
         conn = get_db(); c = conn.cursor()
         tanggal_ini = datetime.date.today().isoformat()
@@ -112,7 +125,7 @@ def tambah_food_log(user_id, message_id, photo_message_id, nama, porsi, kalori, 
         if isinstance(nama, list): nama = ", ".join(map(str, nama))
         else: nama = str(nama)
             
-        c.execute('''INSERT INTO food_logs (user_id, message_id, photo_message_id, tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (str(user_id), message_id, photo_message_id, tanggal_ini, nama, porsi, kal, pro, kar, lem, gul))
+        c.execute('''INSERT INTO food_logs (user_id, message_id, photo_message_id, photo_hash, tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (str(user_id), message_id, photo_message_id, photo_hash, tanggal_ini, nama, porsi, kal, pro, kar, lem, gul))
         conn.commit(); conn.close(); return True
     except Exception as e: logger.error(f"tambah_food_log error: {e}"); return False
 
