@@ -30,10 +30,11 @@ import handlers.start
 import handlers.chat
 import handlers.gym
 import handlers.calorie
+import handlers.voice # <--- TAMBAHAN BARU
 import handlers.downloader
 import handlers.router
 
 if __name__ == "__main__":
     setup_db()
-    logger.info("🚀 Bot Full Power V11 (Kalori Tracker) berhasil jalan!")
+    logger.info("🚀 Bot Full Power V12 (Voice Note) berhasil jalan!")
     bot.infinity_polling()

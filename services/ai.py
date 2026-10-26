@@ -1,6 +1,7 @@
 import logging
 import base64
 import json
+import os
 from bot_instance import groq_client
 from config import PRIORITAS_MODEL
 from database.queries import cache_get, cache_set, buat_cache_key, ambil_chat_history
@@ -162,7 +163,6 @@ def koreksi_foto_makanan(koreksi_user):
         "Berikan output HANYA format JSON murni dengan key: "
         "nama_makanan (HARUS BERUPA TEKS STRING, BUKAN LIST/ARRAY), estimasi_porsi, kalori, protein, karbo, lemak, gula."
     )
-    
     try:
         response = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt_text}],
@@ -175,4 +175,61 @@ def koreksi_foto_makanan(koreksi_user):
         return json.loads(hasil)
     except Exception as e:
         logger.error(f"Koreksi API Error: {e}")
+        return None
+
+# --- FUNGSI AI VOICE NOTE ---
+
+def transkripsi_audio(audio_file_path):
+    """Mengubah suara jadi teks pakai Groq Whisper"""
+    try:
+        with open(audio_file_path, "rb") as file:
+            transcription = groq_client.audio.transcriptions.create(
+                file=(os.path.basename(audio_file_path), file.read()),
+                model="whisper-large-v3-turbo",
+                response_format="text",
+                language="id"
+            )
+        return transcription.strip()
+    except Exception as e:
+        logger.error(f"Whisper Error: {e}")
+        return None
+
+def proses_voice_note(teks):
+    """Menganalisis teks dari suara, nentuin mau diapain"""
+    prompt = f"""
+    Kamu adalah asisten AI serba bisa. User baru saja mengirim pesan suara dengan transkripsi berikut:
+    "{teks}"
+
+    Analisis teks tersebut dan tentukan aksi yang harus dilakukan.
+    Output HANYA JSON murni dengan format:
+    {{
+      "food_data": {{
+        "nama_makanan": "string",
+        "estimasi_porsi": "string",
+        "kalori": number,
+        "protein": number,
+        "karbo": number,
+        "lemak": number,
+        "gula": number
+      }} atau null,
+      "gym_data": "string (deskripsi latihan)" atau null,
+      "chat_reply": "string (balasan natural)" atau null
+    }}
+
+    PENTING:
+    - Jika user mencatat makanan, isi `food_data`. Kosongkan (null) `gym_data` dan `chat_reply`.
+    - Jika user mencatat latihan gym, isi `gym_data`. Kosongkan (null) `food_data` dan `chat_reply`.
+    - Jika user cuma ngobrol, isi `chat_reply`. Kosongkan (null) `food_data` dan `gym_data`.
+    """
+    try:
+        response = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="qwen/qwen3.8-27b",
+            temperature=0.1,
+            max_completion_tokens=500,
+            response_format={"type": "json_object"}
+        )
+        return json.loads(response.choices[0].message.content.strip())
+    except Exception as e:
+        logger.error(f"Voice Intent Error: {e}")
         return None
