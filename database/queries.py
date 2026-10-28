@@ -8,12 +8,10 @@ from config import CHAT_HISTORY_LIMIT, CHAT_MAX_MESSAGES
 logger = logging.getLogger(__name__)
 
 def parse_number(val):
-    if isinstance(val, (int, float)):
-        return val
+    if isinstance(val, (int, float)): return val
     if isinstance(val, str):
         match = re.search(r'[\d\.]+', val)
-        if match:
-            return float(match.group())
+        if match: return float(match.group())
     return 0.0
 
 def simpan_ke_db(user_id, username, teks_asli, teks_rapi):
@@ -99,32 +97,22 @@ def save_gym_profile(user_id, data):
 # --- FUNGSI KALORI & GULA TRACKER ---
 
 def cek_duplikat_foto(user_id, photo_hash):
-    """Cek apakah foto dengan hash ini udah pernah dikirim user hari ini"""
     try:
         conn = get_db(); c = conn.cursor()
         tanggal_ini = datetime.date.today().isoformat()
         c.execute("SELECT id FROM food_logs WHERE user_id = ? AND photo_hash = ? AND tanggal = ?", (str(user_id), photo_hash, tanggal_ini))
-        row = c.fetchone()
-        conn.close()
-        return bool(row)
-    except Exception as e: 
-        logger.error(f"cek_duplikat_foto error: {e}")
-        return False
+        row = c.fetchone(); conn.close(); return bool(row)
+    except Exception as e: logger.error(f"cek_duplikat_foto error: {e}"); return False
 
 def tambah_food_log(user_id, message_id, photo_message_id, photo_hash, nama, porsi, kalori, protein, karbo, lemak, gula):
     try:
         conn = get_db(); c = conn.cursor()
         tanggal_ini = datetime.date.today().isoformat()
-        
-        kal = int(parse_number(kalori))
-        pro = float(parse_number(protein))
-        kar = float(parse_number(karbo))
-        lem = float(parse_number(lemak))
+        kal = int(parse_number(kalori)); pro = float(parse_number(protein))
+        kar = float(parse_number(karbo)); lem = float(parse_number(lemak))
         gul = float(parse_number(gula))
-        
         if isinstance(nama, list): nama = ", ".join(map(str, nama))
         else: nama = str(nama)
-            
         c.execute('''INSERT INTO food_logs (user_id, message_id, photo_message_id, photo_hash, tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (str(user_id), message_id, photo_message_id, photo_hash, tanggal_ini, nama, porsi, kal, pro, kar, lem, gul))
         conn.commit(); conn.close(); return True
     except Exception as e: logger.error(f"tambah_food_log error: {e}"); return False
@@ -139,19 +127,13 @@ def cek_id_makanan(user_id, reply_msg_id):
 def update_food_log(user_id, reply_msg_id, nama, porsi, kalori, protein, karbo, lemak, gula):
     try:
         conn = get_db(); c = conn.cursor()
-        
-        kal = int(parse_number(kalori))
-        pro = float(parse_number(protein))
-        kar = float(parse_number(karbo))
-        lem = float(parse_number(lemak))
+        kal = int(parse_number(kalori)); pro = float(parse_number(protein))
+        kar = float(parse_number(karbo)); lem = float(parse_number(lemak))
         gul = float(parse_number(gula))
-        
         if isinstance(nama, list): nama = ", ".join(map(str, nama))
         else: nama = str(nama)
-            
         c.execute('''UPDATE food_logs SET nama_makanan=?, estimasi_porsi=?, kalori=?, protein=?, karbo=?, lemak=?, gula=? WHERE user_id=? AND (message_id=? OR photo_message_id=?)''', (nama, porsi, kal, pro, kar, lem, gul, str(user_id), reply_msg_id, reply_msg_id))
-        affected = c.rowcount
-        conn.commit(); conn.close(); return affected > 0
+        affected = c.rowcount; conn.commit(); conn.close(); return affected > 0
     except Exception as e: logger.error(f"update_food_log error: {e}"); return False
 
 def get_total_makro_hari_ini(user_id):
@@ -159,11 +141,8 @@ def get_total_makro_hari_ini(user_id):
         conn = get_db(); c = conn.cursor()
         tanggal_ini = datetime.date.today().isoformat()
         c.execute("SELECT SUM(kalori), SUM(gula) FROM food_logs WHERE user_id = ? AND tanggal = ?", (str(user_id), tanggal_ini))
-        row = c.fetchone()
-        conn.close()
-        kalori = row[0] if row[0] else 0
-        gula = row[1] if row[1] else 0
-        return kalori, gula
+        row = c.fetchone(); conn.close()
+        return (row[0] if row[0] else 0), (row[1] if row[1] else 0)
     except Exception as e: logger.error(f"get_total_makro error: {e}"); return 0, 0
 
 def get_history_makanan_hari_ini(user_id):
@@ -178,6 +157,41 @@ def hapus_log_terakhir(user_id):
     try:
         conn = get_db(); c = conn.cursor()
         c.execute('''DELETE FROM food_logs WHERE id = (SELECT id FROM food_logs WHERE user_id = ? ORDER BY id DESC LIMIT 1)''', (str(user_id),))
-        affected = c.rowcount
-        conn.commit(); conn.close(); return affected > 0
+        affected = c.rowcount; conn.commit(); conn.close(); return affected > 0
     except Exception as e: logger.error(f"hapus_log_terakhir error: {e}"); return False
+
+# --- FUNGSI WATER & WEIGHT TRACKER ---
+
+def tambah_air(user_id, ml):
+    try:
+        conn = get_db(); c = conn.cursor()
+        tanggal_ini = datetime.date.today().isoformat()
+        c.execute("INSERT INTO water_logs (user_id, tanggal, ml) VALUES (?, ?, ?)", (str(user_id), tanggal_ini, ml))
+        conn.commit(); conn.close(); return True
+    except Exception as e: logger.error(f"tambah_air error: {e}"); return False
+
+def get_total_air_hari_ini(user_id):
+    try:
+        conn = get_db(); c = conn.cursor()
+        tanggal_ini = datetime.date.today().isoformat()
+        c.execute("SELECT SUM(ml) FROM water_logs WHERE user_id = ? AND tanggal = ?", (str(user_id), tanggal_ini))
+        total = c.fetchone()[0]; conn.close(); return total if total else 0
+    except Exception as e: logger.error(f"get_total_air error: {e}"); return 0
+
+def tambah_berat_badan(user_id, berat):
+    try:
+        conn = get_db(); c = conn.cursor()
+        tanggal_ini = datetime.date.today().isoformat()
+        berat_float = float(parse_number(berat))
+        c.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES (?, ?, ?)", (str(user_id), tanggal_ini, berat_float))
+        conn.commit(); conn.close(); return True
+    except Exception as e: logger.error(f"tambah_berat_badan error: {e}"); return False
+
+def get_berat_terakhir(user_id):
+    try:
+        conn = get_db(); c = conn.cursor()
+        # Ambil 2 data terakhir buat bandingin
+        c.execute("SELECT berat, tanggal FROM weight_logs WHERE user_id = ? ORDER BY id DESC LIMIT 2", (str(user_id),))
+        rows = c.fetchall(); conn.close()
+        return rows
+    except Exception as e: logger.error(f"get_berat_terakhir error: {e}"); return []

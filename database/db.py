@@ -44,17 +44,12 @@ def migrasi_food_logs_table():
         c.execute("PRAGMA table_info(food_logs)")
         kolom_lama = [row[1] for row in c.fetchall()]
 
-        if 'message_id' not in kolom_lama:
-            c.execute("ALTER TABLE food_logs ADD COLUMN message_id INTEGER")
-        if 'photo_message_id' not in kolom_lama:
-            c.execute("ALTER TABLE food_logs ADD COLUMN photo_message_id INTEGER")
-        if 'gula' not in kolom_lama:
-            c.execute("ALTER TABLE food_logs ADD COLUMN gula REAL DEFAULT 0.0")
-        if 'photo_hash' not in kolom_lama:
-            c.execute("ALTER TABLE food_logs ADD COLUMN photo_hash TEXT")
+        if 'message_id' not in kolom_lama: c.execute("ALTER TABLE food_logs ADD COLUMN message_id INTEGER")
+        if 'photo_message_id' not in kolom_lama: c.execute("ALTER TABLE food_logs ADD COLUMN photo_message_id INTEGER")
+        if 'gula' not in kolom_lama: c.execute("ALTER TABLE food_logs ADD COLUMN gula REAL DEFAULT 0.0")
+        if 'photo_hash' not in kolom_lama: c.execute("ALTER TABLE food_logs ADD COLUMN photo_hash TEXT")
             
         conn.commit()
-        logger.info("✅ Migrasi: kolom food_logs siap (termasuk gula & photo_hash)")
         conn.close()
     except Exception as e:
         logger.error(f"migrasi_food_logs_table error: {e}")
@@ -72,19 +67,30 @@ def setup_db():
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS food_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, message_id INTEGER,
+            photo_message_id INTEGER, photo_hash TEXT, tanggal DATE, nama_makanan TEXT,
+            estimasi_porsi TEXT, kalori INTEGER, protein REAL, karbo REAL, lemak REAL,
+            gula REAL DEFAULT 0.0, waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS water_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT,
-            message_id INTEGER,
-            photo_message_id INTEGER,
-            photo_hash TEXT,
             tanggal DATE,
-            nama_makanan TEXT,
-            estimasi_porsi TEXT,
-            kalori INTEGER,
-            protein REAL,
-            karbo REAL,
-            lemak REAL,
-            gula REAL DEFAULT 0.0,
+            ml INTEGER,
+            waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # TABEL BARU: WEIGHT LOGS
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS weight_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            tanggal DATE,
+            berat REAL,
             waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -92,6 +98,8 @@ def setup_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_id ON histori_chat(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_user ON chat_messages(user_id, id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_food_user ON food_logs(user_id, tanggal)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_water_user ON water_logs(user_id, tanggal)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_weight_user ON weight_logs(user_id, tanggal)")
 
     conn.commit()
     conn.close()

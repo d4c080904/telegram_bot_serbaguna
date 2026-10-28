@@ -5,15 +5,16 @@ def buat_menu_utama():
     btn_rapih = types.InlineKeyboardButton("📝 Perapih Teks", callback_data="menu_rapih")
     btn_chat = types.InlineKeyboardButton("💬 AI Chat", callback_data="menu_chat")
     btn_gym = types.InlineKeyboardButton("💪 Asisten Gym", callback_data="menu_gym")
-    btn_klr = types.InlineKeyboardButton("🍎 Kalori Tracker", callback_data="menu_kalori")
+    btn_klr = types.InlineKeyboardButton("🍎 Kalori & Gula", callback_data="menu_kalori")
+    btn_progress = types.InlineKeyboardButton("📈 Progress & Air", callback_data="menu_progress") # <-- TOMBOL BARU
     btn_dl = types.InlineKeyboardButton("📥 Downloader", callback_data="menu_downloader")
     btn_stats = types.InlineKeyboardButton("📊 Statistik", callback_data="menu_stats")
     btn_help = types.InlineKeyboardButton("❓ Bantuan", callback_data="menu_help")
     
     markup.add(btn_rapih, btn_chat)
     markup.add(btn_gym, btn_klr)
-    markup.add(btn_dl, btn_stats)
-    markup.add(btn_help)
+    markup.add(btn_progress, btn_dl) # <-- PASANG DI SINI
+    markup.add(btn_stats, btn_help)
     return markup
 
 def teks_menu_utama():
@@ -25,7 +26,8 @@ def teks_menu_utama():
         "📝 *Perapih Teks* — ubah bahasa gaul jadi baku\n"
         "💬 *AI Chat* — ngobrol bebas kayak ChatGPT\n"
         "💪 *Asisten Gym* — PT AI pribadi lu\n"
-        "🍎 *Kalori Tracker* — Catat makan pakai foto\n"
+        "🍎 *Kalori & Gula* — Catat makan pakai foto/suara\n"
+        "📈 *Progress & Air* — Pantau hidrasi & berat badan\n"
         "📥 *Downloader* — TikTok, IG, YouTube\n"
         "📊 *Statistik* — cek pemakaian lu\n"
         "❓ *Bantuan* — panduan lengkap\n\n"
