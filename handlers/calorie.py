@@ -1,27 +1,19 @@
 from bot_instance import bot
 from telebot import types
 from database.queries import (
-    get_gym_profile, 
-    get_total_makro_hari_ini, 
-    get_history_makanan_hari_ini, 
-    hapus_log_terakhir, 
-    cek_duplikat_foto,
-    tambah_food_log
+    get_gym_profile, get_total_makro_hari_ini, get_history_makanan_hari_ini, 
+    hapus_log_terakhir, cek_duplikat_foto, tambah_food_log
 )
 from utils.helpers import hitung_bmr_tdee
 from utils.decorators import rate_limited
-from keyboards.menus import tombol_kembali
 import logging
 import datetime
 import hashlib
 
 logger = logging.getLogger(__name__)
 
-# Kamus Bahasa Indonesia
 HARI_INDONESIA = {'Monday': 'Senin', 'Tuesday': 'Selasa', 'Wednesday': 'Rabu', 'Thursday': 'Kamis', 'Friday': 'Jumat', 'Saturday': 'Sabtu', 'Sunday': 'Minggu'}
 BULAN_INDONESIA = {'January': 'Januari', 'February': 'Februari', 'March': 'Maret', 'April': 'April', 'May': 'Mei', 'June': 'Juni', 'July': 'Juli', 'August': 'Agustus', 'September': 'September', 'October': 'Oktober', 'November': 'November', 'December': 'Desember'}
-
-# Set Timezone WIB (UTC+7)
 WIB_TZ = datetime.timezone(datetime.timedelta(hours=7))
 
 _waiting_food_photo = set()
@@ -41,20 +33,17 @@ def tampil_dashboard_kalori(chat_id, user_id, message_id=None):
     target = profil['target'] or 'recomp'
     batas_kalori = hitung_bmr_tdee(profil['umur'], profil['berat'], profil['tinggi'], profil['jenis_kelamin'] or 'L', target, profil['frekuensi'] or 3)
     
-    # Batas Gula Harian (Cutting: 25g, Bulking/Recomp: 50g)
     batas_gula = 25 if target == 'cutting' else 50
     
     masuk_kalori, masuk_gula = get_total_makro_hari_ini(user_id)
     sisa_kalori = batas_kalori - masuk_kalori
     sisa_gula = batas_gula - masuk_gula
     
-    # Ambil Waktu Real-Time (WIB)
     now = datetime.datetime.now(WIB_TZ)
     hari_id = HARI_INDONESIA.get(now.strftime("%A"), now.strftime("%A"))
     bulan_id = BULAN_INDONESIA.get(now.strftime("%B"), now.strftime("%B"))
     waktu_str = f"{hari_id}, {now.day} {bulan_id} {now.year} | {now.strftime('%H:%M')} WIB"
     
-    # Icon hati/merah kalau gula udah lewat batas
     icon_gula = "✅" if sisa_gula >= 0 else "🚨"
     
     teks = (
@@ -76,7 +65,8 @@ def tampil_dashboard_kalori(chat_id, user_id, message_id=None):
     btn_foto = types.InlineKeyboardButton("📸 Foto Makanan", callback_data="kalori_foto")
     btn_hapus = types.InlineKeyboardButton("📝 Hapus Log Terakhir", callback_data="kalori_hapus")
     btn_history = types.InlineKeyboardButton("📊 Lihat History", callback_data="kalori_history")
-    btn_kembali = types.InlineKeyboardButton("🔙 Kembali ke Menu", callback_data="menu_utama")
+    btn_kembali = types.InlineKeyboardButton("🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode") # <--- DIUBAH
+    
     markup.add(btn_foto)
     markup.add(btn_hapus, btn_history)
     markup.add(btn_kembali)
@@ -123,7 +113,6 @@ def callback_kalori_history(call):
         bot.answer_callback_query(call.id)
         history = get_history_makanan_hari_ini(call.from_user.id)
         
-        # Ambil Waktu Real-Time (WIB)
         now = datetime.datetime.now(WIB_TZ)
         hari_id = HARI_INDONESIA.get(now.strftime("%A"), now.strftime("%A"))
         bulan_id = BULAN_INDONESIA.get(now.strftime("%B"), now.strftime("%B"))
@@ -134,7 +123,6 @@ def callback_kalori_history(call):
         else:
             teks = f"📊 *HISTORY MAKANAN*\n📅 *{tanggal_str}*\n━━━━━━━━━━━━━━━━━━━━\n\n"
             for i, (nama, porsi, kal, gula, waktu_db) in enumerate(history, 1):
-                # Waktu dari SQLite formatnya UTC, kita ubah ke WIB
                 try:
                     dt_utc = datetime.datetime.strptime(waktu_db, '%Y-%m-%d %H:%M:%S').replace(tzinfo=datetime.timezone.utc)
                     dt_wib = dt_utc.astimezone(WIB_TZ)
@@ -160,10 +148,8 @@ def proses_foto_makanan(pesan):
         downloaded_file = bot.download_file(file_info.file_path)
         caption = pesan.caption or ""
         
-        # 1. HITUNG HASH GAMBAR (SIDIK JARI DIGITAL)
         photo_hash = hashlib.md5(downloaded_file).hexdigest()
         
-        # 2. CEK DUPLIKAT
         if cek_duplikat_foto(user_id, photo_hash):
             bot.edit_message_text(
                 "⚠️ *Foto Duplikat Terdeteksi!*\n\nFoto ini persis kayak yang udah lu kirim dan catat hari ini. Biar kalori lu nggak dobel, gw abaikan ya bro. 👍",
@@ -171,7 +157,6 @@ def proses_foto_makanan(pesan):
             )
             return
             
-        # 3. KALAU BUKAN DUPLIKAT, LANJUT KE AI
         from services.ai import analisis_foto_makanan
         hasil = analisis_foto_makanan(downloaded_file, caption)
         
@@ -180,17 +165,10 @@ def proses_foto_makanan(pesan):
             return
             
         berhasil = tambah_food_log(
-            user_id, 
-            pesan_tunggu.message_id, 
-            pesan.message_id, 
-            photo_hash, # SIMPEN HASH
-            hasil.get('nama_makanan', 'Makanan'), 
-            hasil.get('estimasi_porsi', '1 porsi'), 
-            hasil.get('kalori', 0), 
-            hasil.get('protein', 0), 
-            hasil.get('karbo', 0), 
-            hasil.get('lemak', 0),
-            hasil.get('gula', 0)
+            user_id, pesan_tunggu.message_id, pesan.message_id, photo_hash, 
+            hasil.get('nama_makanan', 'Makanan'), hasil.get('estimasi_porsi', '1 porsi'), 
+            hasil.get('kalori', 0), hasil.get('protein', 0), hasil.get('karbo', 0), 
+            hasil.get('lemak', 0), hasil.get('gula', 0)
         )
         
         if not berhasil:

@@ -4,7 +4,7 @@ import json
 import os
 from bot_instance import groq_client
 from config import PRIORITAS_MODEL
-from database.queries import cache_get, cache_set, buat_cache_key, ambil_chat_history
+from database.queries import cache_get, cache_set, buat_cache_key, ambil_chat_history, get_user_profile
 from utils.helpers import hitung_bmi, kategori_bmi
 
 logger = logging.getLogger(__name__)
@@ -65,9 +65,20 @@ def terjemahkan_ke_inggris(teks):
 
 def chat_dengan_ai(user_id, pesan_baru):
     history = ambil_chat_history(user_id)
+    user = get_user_profile(user_id)
+    
+    nama = user['nama'] if user else "Bro"
+    umur = f"{user['umur']} tahun" if user and user['umur'] else ""
+    bb = f"{user['berat']} kg" if user and user['berat'] else ""
+    tb = f"{user['tinggi']} cm" if user and user['tinggi'] else ""
+    
+    profil_str = f"User bernama {nama}, umur {umur}, BB {bb}, TB {tb}."
+    if not user: profil_str = "Kamu belum tau data user ini."
+        
     system_prompt = (
-        "Kamu adalah asisten AI yang santai, ramah, dan pintar. Pakai bahasa Indonesia gaul (gw/lu) tapi tetap sopan. "
-        "Jawab dengan jelas, JANGAN bertele-tele. Kalau nggak tau jawabannya, jujur aja bilang 'gw kurang tau'. "
+        f"Kamu adalah asisten AI yang santai, ramah, dan pintar. {profil_str} "
+        "Panggil user dengan namanya jika kamu tau. Jawab dengan jelas, JANGAN bertele-tele. "
+        "Kalau nggak tau jawabannya, jujur aja bilang 'gw kurang tau'. "
         "JANGAN pernah mengarang fakta atau nama yang nggak jelas. Kalau user nanya hal sensitif/ilegal, tolak dengan sopan. "
         "ATURAN FORMAT: JANGAN pakai format markdown apapun. Dilarang pakai tanda **, *, _, #, `, atau ```. "
         "Tulis dengan teks polos aja. Boleh pakai tanda baca biasa (-, •, 1. 2. 3.) dan emoji kalau perlu."
@@ -158,10 +169,10 @@ def koreksi_foto_makanan(koreksi_user):
     prompt_text = (
         f"User mengoreksi analisis makanan sebelumnya. Koreksi: '{koreksi_user}'. "
         "Tugasmu: Ganti HANYA item makanan yang salah koreksi dengan item yang baru. "
-        "JANGAN menghapus item lain yang tidak disebutkan (misal nasi atau sayur tetap dihitung). "
+        "JANGAN menghapus item lain yang tidak disebutkan. "
         "Hitung ulang TOTAL kalori, makro, dan gula secara keseluruhan. "
         "Berikan output HANYA format JSON murni dengan key: "
-        "nama_makanan (HARUS BERUPA TEKS STRING, BUKAN LIST/ARRAY), estimasi_porsi, kalori, protein, karbo, lemak, gula."
+        "nama_makanan (HARUS TEKS STRING), estimasi_porsi, kalori, protein, karbo, lemak, gula."
     )
     try:
         response = groq_client.chat.completions.create(
@@ -171,16 +182,12 @@ def koreksi_foto_makanan(koreksi_user):
             max_completion_tokens=500,
             response_format={"type": "json_object"}
         )
-        hasil = response.choices[0].message.content.strip()
-        return json.loads(hasil)
+        return json.loads(response.choices[0].message.content.strip())
     except Exception as e:
         logger.error(f"Koreksi API Error: {e}")
         return None
 
-# --- FUNGSI AI VOICE NOTE ---
-
 def transkripsi_audio(audio_file_path):
-    """Mengubah suara jadi teks pakai Groq Whisper"""
     try:
         with open(audio_file_path, "rb") as file:
             transcription = groq_client.audio.transcriptions.create(
@@ -195,7 +202,6 @@ def transkripsi_audio(audio_file_path):
         return None
 
 def proses_voice_note(teks):
-    """Menganalisis teks dari suara, nentuin mau diapain"""
     prompt = f"""
     Kamu adalah asisten AI serba bisa. User baru saja mengirim pesan suara dengan transkripsi berikut:
     "{teks}"
@@ -204,22 +210,17 @@ def proses_voice_note(teks):
     Output HANYA JSON murni dengan format:
     {{
       "food_data": {{
-        "nama_makanan": "string",
-        "estimasi_porsi": "string",
-        "kalori": number,
-        "protein": number,
-        "karbo": number,
-        "lemak": number,
-        "gula": number
+        "nama_makanan": "string", "estimasi_porsi": "string", "kalori": number,
+        "protein": number, "karbo": number, "lemak": number, "gula": number
       }} atau null,
       "gym_data": "string (deskripsi latihan)" atau null,
       "chat_reply": "string (balasan natural)" atau null
     }}
 
     PENTING:
-    - Jika user mencatat makanan, isi `food_data`. Kosongkan (null) `gym_data` dan `chat_reply`.
-    - Jika user mencatat latihan gym, isi `gym_data`. Kosongkan (null) `food_data` dan `chat_reply`.
-    - Jika user cuma ngobrol, isi `chat_reply`. Kosongkan (null) `food_data` dan `gym_data`.
+    - Jika user mencatat makanan, isi `food_data`. Kosongkan `gym_data` dan `chat_reply`.
+    - Jika user mencatat latihan gym, isi `gym_data`. Kosongkan `food_data` dan `chat_reply`.
+    - Jika user cuma ngobrol, isi `chat_reply`. Kosongkan `food_data` dan `gym_data`.
     """
     try:
         response = groq_client.chat.completions.create(
@@ -233,3 +234,29 @@ def proses_voice_note(teks):
     except Exception as e:
         logger.error(f"Voice Intent Error: {e}")
         return None
+
+def rekomendasi_makanan(sisa_kalori, sisa_protein, sisa_karbo, sisa_lemak, target_user):
+    prompt = f"""
+    Kamu adalah Chef & Ahli Gizi Profesional.
+    User sedang diet dengan target: {target_user}.
+    Sisa kalori harian user saat ini: {sisa_kalori} kcal.
+    Sisa Protein: {sisa_protein}g, Karbo: {sisa_karbo}g, Lemak: {sisa_lemak}g.
+    
+    Berikan 1 rekomendasi resep makanan yang:
+    1. Kalorinya TIDAK MELEBIHI sisa kalori.
+    2. Tinggi protein (buat nutupin sisa protein).
+    3. Bahan-bahannya gampang dicari di Indonesia.
+    4. Cara buatnya singkat.
+    
+    Berikan jawaban dengan format teks polos (JANGAN pakai markdown ** atau *), tapi gunakan emoji yang menarik. Maksimal 150 kata.
+    """
+    for model_name in MODEL_GROQ_LIST:
+        try:
+            response = groq_client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model=model_name, temperature=0.7, max_tokens=500
+            )
+            hasil = response.choices[0].message.content.strip()
+            if hasil: return hasil
+        except Exception: continue
+    return None

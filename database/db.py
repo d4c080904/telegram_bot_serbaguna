@@ -11,55 +11,26 @@ def get_db():
     conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
-def migrasi_gym_table():
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("PRAGMA table_info(gym_profile)")
-        kolom_lama = [row[1] for row in c.fetchall()]
-
-        kolom_baru = {
-            'mode': "TEXT DEFAULT 'noob'", 'umur': "INTEGER", 'jenis_kelamin': "TEXT",
-            'level': "TEXT", 'pengalaman': "INTEGER", 'frekuensi': "INTEGER",
-            'alat': "TEXT", 'updated_at': "TEXT" 
-        }
-
-        for nama_kolom, tipe in kolom_baru.items():
-            if nama_kolom not in kolom_lama:
-                try:
-                    c.execute(f"ALTER TABLE gym_profile ADD COLUMN {nama_kolom} {tipe}")
-                    logger.info(f"✅ Migrasi: tambah kolom gym_profile.{nama_kolom}")
-                except Exception as e:
-                    logger.warning(f"Migrasi {nama_kolom} gagal: {e}")
-
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logger.error(f"migrasi_gym_table error: {e}")
-
-def migrasi_food_logs_table():
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("PRAGMA table_info(food_logs)")
-        kolom_lama = [row[1] for row in c.fetchall()]
-
-        if 'message_id' not in kolom_lama: c.execute("ALTER TABLE food_logs ADD COLUMN message_id INTEGER")
-        if 'photo_message_id' not in kolom_lama: c.execute("ALTER TABLE food_logs ADD COLUMN photo_message_id INTEGER")
-        if 'gula' not in kolom_lama: c.execute("ALTER TABLE food_logs ADD COLUMN gula REAL DEFAULT 0.0")
-        if 'photo_hash' not in kolom_lama: c.execute("ALTER TABLE food_logs ADD COLUMN photo_hash TEXT")
-            
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logger.error(f"migrasi_food_logs_table error: {e}")
-
 def setup_db():
     conn = get_db()
     cursor = conn.cursor()
 
+    # TABEL BARU: USER PROFILES (Data Utama)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_profiles (
+            user_id TEXT PRIMARY KEY,
+            nama TEXT,
+            umur INTEGER,
+            berat REAL,
+            tinggi REAL,
+            jenis_kelamin TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Tabel lama tetap ada
     cursor.execute('''CREATE TABLE IF NOT EXISTS histori_chat (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, teks_asli TEXT, teks_rapi TEXT, waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS gym_profile (user_id TEXT PRIMARY KEY, mode TEXT DEFAULT 'noob', umur INTEGER, berat REAL, tinggi REAL, jenis_kelamin TEXT, target TEXT, level TEXT, pengalaman INTEGER, frekuensi INTEGER, alat TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS gym_profile (user_id TEXT PRIMARY KEY, mode TEXT DEFAULT 'noob', target TEXT, level TEXT, pengalaman INTEGER, frekuensi INTEGER, alat TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS gym_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, log_teks TEXT, waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS cache_ai (key TEXT PRIMARY KEY, hasil TEXT, waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS chat_sessions (user_id TEXT PRIMARY KEY, is_active INTEGER DEFAULT 0, last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
@@ -76,22 +47,13 @@ def setup_db():
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS water_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
-            tanggal DATE,
-            ml INTEGER,
-            waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, tanggal DATE, ml INTEGER, waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    # TABEL BARU: WEIGHT LOGS
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS weight_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
-            tanggal DATE,
-            berat REAL,
-            waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, tanggal DATE, berat REAL, waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
@@ -104,6 +66,3 @@ def setup_db():
     conn.commit()
     conn.close()
     logger.info("✅ Database siap")
-    
-    migrasi_gym_table()
-    migrasi_food_logs_table()

@@ -2,18 +2,16 @@ from telebot import types
 
 def buat_menu_utama():
     markup = types.InlineKeyboardMarkup(row_width=2)
+    
     btn_rapih = types.InlineKeyboardButton("📝 Perapih Teks", callback_data="menu_rapih")
     btn_chat = types.InlineKeyboardButton("💬 AI Chat", callback_data="menu_chat")
-    btn_gym = types.InlineKeyboardButton("💪 Asisten Gym", callback_data="menu_gym")
-    btn_klr = types.InlineKeyboardButton("🍎 Kalori & Gula", callback_data="menu_kalori")
-    btn_progress = types.InlineKeyboardButton("📈 Progress & Air", callback_data="menu_progress") # <-- TOMBOL BARU
+    btn_gym_mode = types.InlineKeyboardButton("🏋️‍♂️ GYM MODE", callback_data="menu_gym_mode")
     btn_dl = types.InlineKeyboardButton("📥 Downloader", callback_data="menu_downloader")
     btn_stats = types.InlineKeyboardButton("📊 Statistik", callback_data="menu_stats")
     btn_help = types.InlineKeyboardButton("❓ Bantuan", callback_data="menu_help")
     
     markup.add(btn_rapih, btn_chat)
-    markup.add(btn_gym, btn_klr)
-    markup.add(btn_progress, btn_dl) # <-- PASANG DI SINI
+    markup.add(btn_gym_mode, btn_dl)
     markup.add(btn_stats, btn_help)
     return markup
 
@@ -25,17 +23,41 @@ def teks_menu_utama():
         "Pilih fitur yang lu mau pakai dengan pencet tombol di bawah:\n\n"
         "📝 *Perapih Teks* — ubah bahasa gaul jadi baku\n"
         "💬 *AI Chat* — ngobrol bebas kayak ChatGPT\n"
-        "💪 *Asisten Gym* — PT AI pribadi lu\n"
-        "🍎 *Kalori & Gula* — Catat makan pakai foto/suara\n"
-        "📈 *Progress & Air* — Pantau hidrasi & berat badan\n"
+        "🏋️‍♂️ *GYM MODE* — Semua fitur Gym, Kalori, Air, Meal Planner\n"
         "📥 *Downloader* — TikTok, IG, YouTube\n"
         "📊 *Statistik* — cek pemakaian lu\n"
         "❓ *Bantuan* — panduan lengkap\n\n"
         "_Tinggal pencet, nggak usah ngetik command!_ 👇"
     )
 
+def buat_menu_gym_mode():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    
+    btn_makan = types.InlineKeyboardButton("🍎 Kalori & Gula", callback_data="menu_kalori")
+    btn_progress = types.InlineKeyboardButton("💧 Progress & Air", callback_data="menu_progress")
+    btn_meal = types.InlineKeyboardButton("🍳 Meal Planner", callback_data="menu_meal_planner")
+    btn_program = types.InlineKeyboardButton("💪 Profil & Program", callback_data="menu_gym")
+    btn_chat_pt = types.InlineKeyboardButton("💬 Chat PT AI", callback_data="menu_chat")
+    btn_back = types.InlineKeyboardButton("🔙 Kembali ke Menu Utama", callback_data="menu_utama")
+    
+    markup.add(btn_makan, btn_progress)
+    markup.add(btn_meal, btn_program)
+    markup.add(btn_chat_pt)
+    markup.add(btn_back)
+    return markup
+
+def teks_menu_gym_mode():
+    return (
+        "🏋️‍♂️ *WELCOME TO GYM MODE* 🏋️‍♂️\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Semua fitur buat ngebantu progres gym lu ada di sini.\n"
+        "_(Ketik atau kirim Voice Note kapan aja buat nyatet makanan/latihan)_\n\n"
+        "👇 *Pilih menu di bawah:*"
+    )
+
+# UPDATE: Balikin tombol kembali global ke menu_utama
 def tombol_kembali():
     markup = types.InlineKeyboardMarkup()
-    btn = types.InlineKeyboardButton("🔙 Kembali ke Menu", callback_data="menu_utama")
+    btn = types.InlineKeyboardButton("🔙 Kembali ke Menu Utama", callback_data="menu_utama")
     markup.add(btn)
     return markup

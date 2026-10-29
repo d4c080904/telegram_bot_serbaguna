@@ -10,28 +10,28 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-def tampil_menu_gym(chat_id, message_id=None):
+def tampil_menu_gym(chat_id, user_id, message_id=None):
+    profil = get_gym_profile(user_id)
+    nama = profil['nama'] if profil else "Bro"
+    
     teks = (
-        "💪 *ASISTEN GYM PRIBADI*\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Pilih mode sesuai pengalaman lu:\n\n"
-        "🆕 *Mode Baru Gym*\n"
-        "   Baru mulai? Isi umur, berat, tinggi aja.\n\n"
-        "💪 *Mode Pro Gym*\n"
-        "   Udah pengalaman? Isi data lengkap.\n\n"
-        "👇 Pilih mode:"
+        f"💪 *ASISTEN GYM PRIBADI*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"Halo *{nama}*!\n"
+        f"Data saat ini: {profil['umur']}th, {profil['berat']}kg, {profil['tinggi']}cm\n\n"
+        "Pilih mode program latihan lu:"
     )
+    
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("🆕 Baru Gym", callback_data="gym_noob_start"),
-        types.InlineKeyboardButton("💪 Pro Gym", callback_data="gym_pro_start")
+        types.InlineKeyboardButton("🆕 Mode Baru Gym", callback_data="gym_noob_start"),
+        types.InlineKeyboardButton("💪 Mode Pro Gym", callback_data="gym_pro_start")
     )
     markup.add(
         types.InlineKeyboardButton("📊 Profil Saya", callback_data="gym_view_profile"),
         types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info")
     )
-    markup.add(types.InlineKeyboardButton("🔙 Kembali ke Menu", callback_data="menu_utama"))
+    markup.add(types.InlineKeyboardButton("🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode"))
     
     try:
         if message_id:
@@ -41,25 +41,16 @@ def tampil_menu_gym(chat_id, message_id=None):
     except Exception as e:
         logger.error(f"tampil_menu_gym error: {e}")
 
-
 def tampil_profil_gym(chat_id, user_id, message_id=None):
     profil = get_gym_profile(user_id)
     
     if not profil:
-        teks = (
-            "⚠️ *Lu belum punya profil Gym.*\n\n"
-            "Bikin profil dulu dengan pencet tombol *🆕 Baru Gym* atau *💪 Pro Gym* di menu."
-        )
-        markup = types.InlineKeyboardMarkup().add(
-            types.InlineKeyboardButton("🔙 Kembali ke Menu Gym", callback_data="menu_gym")
-        )
+        teks = "⚠️ *Lu belum punya profil Gym.*\n\nIsi profil dulu di menu awal ya."
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Kembali", callback_data="menu_gym"))
         try:
-            if message_id:
-                bot.edit_message_text(teks, chat_id, message_id, parse_mode='Markdown', reply_markup=markup)
-            else:
-                bot.send_message(chat_id, teks, parse_mode='Markdown', reply_markup=markup)
-        except Exception:
-            pass
+            if message_id: bot.edit_message_text(teks, chat_id, message_id, parse_mode='Markdown', reply_markup=markup)
+            else: bot.send_message(chat_id, teks, parse_mode='Markdown', reply_markup=markup)
+        except Exception: pass
         return
         
     bmi = hitung_bmi(profil['berat'], profil['tinggi'])
@@ -93,14 +84,11 @@ def tampil_profil_gym(chat_id, user_id, message_id=None):
     markup.add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
     
     try:
-        if message_id:
-            bot.edit_message_text(teks, chat_id, message_id, parse_mode='Markdown', reply_markup=markup)
-        else:
-            bot.send_message(chat_id, teks, parse_mode='Markdown', reply_markup=markup)
-    except Exception as e:
-        logger.error(f"tampil_profil_gym error: {e}")
+        if message_id: bot.edit_message_text(teks, chat_id, message_id, parse_mode='Markdown', reply_markup=markup)
+        else: bot.send_message(chat_id, teks, parse_mode='Markdown', reply_markup=markup)
+    except Exception as e: logger.error(f"tampil_profil_gym error: {e}")
 
-
+# --- HANDLER GYM ---
 @bot.message_handler(commands=['gym'])
 @rate_limited
 def handler_gym(pesan):
@@ -109,16 +97,12 @@ def handler_gym(pesan):
         teks_perintah = pesan.text.replace("/gym", "").strip()
         
         if not teks_perintah:
-            tampil_menu_gym(pesan.chat.id)
+            tampil_menu_gym(pesan.chat.id, user_id)
             return
             
         profil = get_gym_profile(user_id)
         if not profil:
-            bot.reply_to(
-                pesan, 
-                "⚠️ Lu belum punya profil Gym nih.\n\nBikin dulu dengan ketik `/gym` (tanpa teks).", 
-                parse_mode='Markdown'
-            )
+            bot.reply_to(pesan, "⚠️ Lu belum punya profil Gym nih.\n\nBikin dulu dengan ketik `/gym` (tanpa teks).", parse_mode='Markdown')
             return
             
         conn = get_db()
@@ -162,12 +146,11 @@ def handler_gym(pesan):
                     model=model_name,
                     temperature=0.7,
                     max_tokens=1024,
-                    frequency_penalty=0.5, # Ditambahin biar ga looping
+                    frequency_penalty=0.5,
                     presence_penalty=0.5
                 )
                 hasil = response.choices[0].message.content.strip()
-                if hasil:
-                    break
+                if hasil: break
             except Exception as e:
                 logger.warning(f"Model {model_name} gagal (gym log): {e}")
                 continue
@@ -182,241 +165,125 @@ def handler_gym(pesan):
             
     except Exception as e:
         logger.error(f"[gym] error: {e}")
-        try:
-            bot.reply_to(pesan, "❌ Ada error di fitur gym. Coba lagi nanti.")
-        except Exception:
-            pass
-
+        try: bot.reply_to(pesan, "❌ Ada error di fitur gym. Coba lagi nanti.")
+        except Exception: pass
 
 def proses_gym_wizard(pesan, wizard):
     user_id = pesan.from_user.id
     teks = pesan.text.strip()
     mode = wizard['mode']
     
-    if mode == 'noob':
-        parts = [p.strip() for p in teks.split('|')]
-        if len(parts) != 3:
-            bot.reply_to(
-                pesan, 
-                "❌ Format salah bro.\n\nKirim pakai format:\n`umur | berat | tinggi`\n\nContoh:\n`22 | 65 | 170`", 
-                parse_mode='Markdown'
-            )
-            return
-            
-        try:
-            umur = int(parts[0])
-            berat = float(parts[1])
-            tinggi = float(parts[2])
-        except ValueError:
-            bot.reply_to(pesan, "❌ Angka-angkanya harus valid. Coba lagi ya.")
-            return
-            
-        if not (10 <= umur <= 100) or not (20 <= berat <= 300) or not (100 <= tinggi <= 250):
-            bot.reply_to(pesan, "❌ Angka di luar batas wajar. Cek lagi ya.")
-            return
-            
-        data_noob = {'mode': 'noob', 'umur': umur, 'berat': berat, 'tinggi': tinggi}
-        
-        # INI BAGIAN YANG DIBENERIN: Cek apakah save berhasil
-        if not save_gym_profile(user_id, data_noob):
-            bot.reply_to(pesan, "❌ Gagal menyimpan data ke database. Coba lagi nanti.")
-            return
-            
-        clear_gym_wizard(user_id)
-        
-        bmi = hitung_bmi(berat, tinggi)
-        bot.reply_to(
-            pesan,
-            f"✅ *Data tersimpan!*\n\n"
-            f"👤 Umur: {umur} tahun\n"
-            f"⚖️ Berat: {berat} kg\n"
-            f"📏 Tinggi: {tinggi} cm\n"
-            f"📈 BMI: {bmi}\n\n"
-            f"⏳ _AI lagi nyiapin panduan buat lu..._",
-            parse_mode='Markdown'
-        )
-        
-        bot.send_chat_action(pesan.chat.id, 'typing')
-        hasil = analisis_gym_noob(umur, berat, tinggi)
-        
-        if hasil:
-            try:
-                bot.send_message(pesan.chat.id, hasil, parse_mode='Markdown')
-            except Exception:
-                bot.send_message(pesan.chat.id, strip_markdown(hasil))
-        else:
-            bot.send_message(pesan.chat.id, "❌ AI-nya lagi error. Coba lagi nanti ya.")
-            
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info"),
-            types.InlineKeyboardButton("📊 Profil Saya", callback_data="gym_view_profile")
-        )
-        markup.add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
-        bot.send_message(pesan.chat.id, "👇 Selanjutnya lu bisa:", reply_markup=markup)
-        return
-        
-    elif mode == 'pro':
+    if mode == 'pro':
         parts = [p.strip().lower() for p in teks.split('|')]
-        if len(parts) != 9:
-            bot.reply_to(
-                pesan,
-                "❌ Format salah bro.\n\n"
-                "Kirim pakai format:\n"
-                "`umur | berat | tinggi | gender | target | level | pengalaman | frekuensi | alat`\n\n"
-                "Contoh:\n"
-                "`25 | 75 | 178 | L | cutting | intermediate | 3 | 5 | gym_full`\n\n"
-                "*Keterangan:*\n"
-                "• gender: L / P\n"
-                "• target: bulking / cutting / recomp / strength\n"
-                "• level: beginner / intermediate / advanced\n"
-                "• alat: gym_full / home_dumbbell / bodyweight / home_barbell",
-                parse_mode='Markdown'
-            )
+        if len(parts) != 5:
+            bot.reply_to(pesan, "❌ Format salah bro.\n\nKirim pakai format:\n`target | level | pengalaman | frekuensi | alat`\n\nContoh:\n`cutting | intermediate | 3 | 5 | gym_full`", parse_mode='Markdown')
             return
-            
         try:
-            umur = int(parts[0])
-            berat = float(parts[1])
-            tinggi = float(parts[2])
-            gender = parts[3].upper()
-            target = parts[4]
-            level = parts[5]
-            pengalaman = int(parts[6])
-            frekuensi = int(parts[7])
-            alat = parts[8]
+            target = parts[0]
+            level = parts[1]
+            pengalaman = int(parts[2])
+            frekuensi = int(parts[3])
+            alat = parts[4]
         except ValueError:
-            bot.reply_to(pesan, "❌ Ada angka yang salah format. Coba lagi ya.")
+            bot.reply_to(pesan, "❌ Ada format yang salah. Coba lagi.")
             return
             
-        if (gender not in ('L', 'P') or 
-            target not in ('bulking', 'cutting', 'recomp', 'strength') or 
-            level not in ('beginner', 'intermediate', 'advanced') or 
-            alat not in ('gym_full', 'home_dumbbell', 'home_barbell', 'bodyweight')):
-            bot.reply_to(pesan, "❌ Ada input teks yang salah. Cek lagi formatnya.")
+        if target not in ('bulking', 'cutting', 'recomp', 'strength') or level not in ('beginner', 'intermediate', 'advanced') or alat not in ('gym_full', 'home_dumbbell', 'home_barbell', 'bodyweight'):
+            bot.reply_to(pesan, "❌ Pilihan teks salah. Cek lagi formatnya.")
             return
             
-        data_pro = {
-            'mode': 'pro',
-            'umur': umur,
-            'berat': berat,
-            'tinggi': tinggi,
-            'jenis_kelamin': gender,
-            'target': target,
-            'level': level,
-            'pengalaman': pengalaman,
-            'frekuensi': frekuensi,
-            'alat': alat,
-        }
-        
-        # INI BAGIAN YANG DIBENERIN: Cek apakah save berhasil
-        if not save_gym_profile(user_id, data_pro):
-            bot.reply_to(pesan, "❌ Gagal menyimpan data ke database. Coba lagi nanti.")
-            return
-            
+        data_pro = {'mode': 'pro', 'target': target, 'level': level, 'pengalaman': pengalaman, 'frekuensi': frekuensi, 'alat': alat}
+        save_gym_profile(user_id, data_pro)
         clear_gym_wizard(user_id)
         
-        bmi = hitung_bmi(berat, tinggi)
-        bot.reply_to(
-            pesan,
-            f"✅ *Data tersimpan!*\n\n"
-            f"👤 {umur}th, {gender}, {berat}kg, {tinggi}cm\n"
-            f"📈 BMI: {bmi}\n"
-            f"🎯 Target: {target}\n"
-            f"🎓 Level: {level}\n\n"
-            f"⏳ _AI lagi nyiapin analisis advanced..._",
-            parse_mode='Markdown'
-        )
-        
+        profil = get_gym_profile(user_id)
+        if not profil:
+            bot.reply_to(pesan, "❌ Gagal ambil data profil.")
+            return
+            
+        bot.reply_to(pesan, f"✅ Data program Pro disimpan!\n\n⏳ _AI lagi nyiapin analisis advanced..._", parse_mode='Markdown')
         bot.send_chat_action(pesan.chat.id, 'typing')
+        
+        data_pro.update({'umur': profil['umur'], 'berat': profil['berat'], 'tinggi': profil['tinggi'], 'jenis_kelamin': profil['jenis_kelamin']})
         hasil = analisis_gym_pro(data_pro)
         
         if hasil:
-            try:
-                bot.send_message(pesan.chat.id, hasil, parse_mode='Markdown')
-            except Exception:
-                bot.send_message(pesan.chat.id, strip_markdown(hasil))
+            try: bot.send_message(pesan.chat.id, hasil, parse_mode='Markdown')
+            except Exception: bot.send_message(pesan.chat.id, strip_markdown(hasil))
         else:
             bot.send_message(pesan.chat.id, "❌ AI-nya lagi error. Coba lagi nanti ya.")
             
         markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info"),
-            types.InlineKeyboardButton("📊 Profil Saya", callback_data="gym_view_profile")
-        )
+        markup.add(types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info"), types.InlineKeyboardButton("📊 Profil Saya", callback_data="gym_view_profile"))
         markup.add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
         bot.send_message(pesan.chat.id, "👇 Selanjutnya lu bisa:", reply_markup=markup)
         return
-
 
 @bot.callback_query_handler(func=lambda call: call.data == "menu_gym")
 def callback_menu_gym(call):
     try:
         bot.answer_callback_query(call.id)
         clear_gym_wizard(call.from_user.id)
-        tampil_menu_gym(call.message.chat.id, call.message.message_id)
-    except Exception as e:
-        logger.error(f"[menu_gym] error: {e}")
-
+        tampil_menu_gym(call.message.chat.id, call.from_user.id, call.message.message_id)
+    except Exception as e: logger.error(f"[menu_gym] error: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "gym_noob_start")
 def callback_gym_noob_start(call):
     try:
-        set_gym_wizard(call.from_user.id, 'noob', 'input_data')
-        bot.answer_callback_query(call.id, "🆕 Mode Baru Gym!")
+        user_id = str(call.from_user.id)
+        bot.answer_callback_query(call.id, "⏳ Nyiapin panduan...")
         
-        teks = (
-            "🆕 *MODE BARU GYM*\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Oke bro, gampang kok! Cukup kirim 3 data ini:\n\n"
-            "📌 *Format:*\n"
-            "`umur | berat | tinggi`\n\n"
-            "📌 *Contoh:*\n"
-            "`22 | 65 | 170`\n\n"
-            "Gass kirim datanya! 👇\n\n"
-            "_Ketik /cancel kalau mau batal_"
-        )
-        try:
-            bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
-        except Exception:
-            bot.send_message(call.message.chat.id, teks, parse_mode='Markdown')
-    except Exception as e:
-        logger.error(f"[gym_noob] error: {e}")
-
+        profil = get_gym_profile(user_id)
+        if not profil:
+            bot.send_message(call.message.chat.id, "⚠️ Lu belum isi profil di awal. Ketik /start dulu ya.")
+            return
+            
+        save_gym_profile(user_id, {'mode': 'noob', 'target': 'recomp'})
+        
+        bot.edit_message_text("⏳ _AI lagi nyiapin panduan buat lu..._", call.message.chat.id, call.message.message_id)
+        bot.send_chat_action(call.message.chat.id, 'typing')
+        
+        hasil = analisis_gym_noob(profil['umur'], profil['berat'], profil['tinggi'])
+        
+        if hasil:
+            try: bot.send_message(call.message.chat.id, hasil, parse_mode='Markdown')
+            except Exception: bot.send_message(call.message.chat.id, strip_markdown(hasil))
+        else:
+            bot.send_message(call.message.chat.id, "❌ AI error. Coba lagi.")
+            
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info"), types.InlineKeyboardButton("📊 Profil Saya", callback_data="gym_view_profile"))
+        markup.add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
+        bot.send_message(call.message.chat.id, "👇 Selanjutnya lu bisa:", reply_markup=markup)
+        
+    except Exception as e: logger.error(f"[gym_noob] error: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "gym_pro_start")
 def callback_gym_pro_start(call):
     try:
         set_gym_wizard(call.from_user.id, 'pro', 'input_data')
         bot.answer_callback_query(call.id, "💪 Mode Pro Gym!")
-        
         teks = (
             "💪 *MODE PRO GYM*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Oke bro, kirim data lengkap lu dalam 1 baris:\n\n"
+            "Kirim data program lu dalam 1 baris:\n\n"
             "📌 *Format:*\n"
-            "`umur | berat | tinggi | gender | target | level | pengalaman | frekuensi | alat`\n\n"
+            "`target | level | pengalaman | frekuensi | alat`\n\n"
             "📌 *Contoh:*\n"
-            "`25 | 75 | 178 | L | cutting | intermediate | 3 | 5 | gym_full`\n\n"
+            "`cutting | intermediate | 3 | 5 | gym_full`\n\n"
             "Gass kirim datanya! 👇\n\n"
             "_Ketik /cancel kalau mau batal_"
         )
-        try:
-            bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
-        except Exception:
-            bot.send_message(call.message.chat.id, teks, parse_mode='Markdown')
-    except Exception as e:
-        logger.error(f"[gym_pro] error: {e}")
-
+        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
+        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown')
+    except Exception as e: logger.error(f"[gym_pro] error: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "gym_view_profile")
 def callback_gym_view_profile(call):
     try:
         bot.answer_callback_query(call.id)
         tampil_profil_gym(call.message.chat.id, call.from_user.id, call.message.message_id)
-    except Exception as e:
-        logger.error(f"[gym_view_profile] error: {e}")
-
+    except Exception as e: logger.error(f"[gym_view_profile] error: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "gym_log_info")
 def callback_gym_log_info(call):
@@ -431,12 +298,7 @@ def callback_gym_log_info(call):
             "`/gym hari ini latihan dada, bench 60kg 4x10`\n\n"
             "AI bakal evaluasi & kasih saran sesuai profil lu. 🔥"
         )
-        markup = types.InlineKeyboardMarkup().add(
-            types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym")
-        )
-        try:
-            bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=markup)
-        except Exception:
-            bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=markup)
-    except Exception as e:
-        logger.error(f"[gym_log_info] error: {e}")
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
+        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=markup)
+        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=markup)
+    except Exception as e: logger.error(f"[gym_log_info] error: {e}")

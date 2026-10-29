@@ -14,6 +14,62 @@ def parse_number(val):
         if match: return float(match.group())
     return 0.0
 
+# --- FUNGSI PROFIL USER ---
+def get_user_profile(user_id):
+    try:
+        conn = get_db(); c = conn.cursor()
+        c.execute("SELECT nama, umur, berat, tinggi, jenis_kelamin FROM user_profiles WHERE user_id = ?", (str(user_id),))
+        row = c.fetchone(); conn.close()
+        if not row: return None
+        return {'nama': row[0], 'umur': row[1], 'berat': row[2], 'tinggi': row[3], 'jenis_kelamin': row[4]}
+    except Exception as e:
+        logger.error(f"get_user_profile error: {e}"); return None
+
+def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
+    try:
+        conn = get_db(); c = conn.cursor()
+        c.execute('''INSERT OR REPLACE INTO user_profiles (user_id, nama, umur, berat, tinggi, jenis_kelamin, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)''', (str(user_id), nama, int(umur), float(berat), float(tinggi), jenis_kelamin))
+        
+        tanggal_ini = datetime.date.today().isoformat()
+        c.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES (?, ?, ?)", (str(user_id), tanggal_ini, float(berat)))
+        
+        conn.commit(); conn.close(); return True
+    except Exception as e:
+        logger.error(f"save_user_profile error: {e}"); return False
+
+# --- FUNGSI GYM ---
+def get_gym_profile(user_id):
+    try:
+        conn = get_db(); c = conn.cursor()
+        c.execute('''SELECT target, level, pengalaman, frekuensi, alat, mode FROM gym_profile WHERE user_id = ?''', (str(user_id),))
+        row_gym = c.fetchone()
+        
+        c.execute("SELECT nama, umur, berat, tinggi, jenis_kelamin FROM user_profiles WHERE user_id = ?", (str(user_id),))
+        row_user = c.fetchone()
+        conn.close()
+        
+        if not row_user: return None
+        
+        profil = {'nama': row_user[0], 'umur': row_user[1], 'berat': row_user[2], 'tinggi': row_user[3], 'jenis_kelamin': row_user[4]}
+        
+        if row_gym:
+            profil.update({'target': row_gym[0], 'level': row_gym[1], 'pengalaman': row_gym[2], 'frekuensi': row_gym[3], 'alat': row_gym[4], 'mode': row_gym[5] or 'noob'})
+        else:
+            profil.update({'target': None, 'level': None, 'pengalaman': None, 'frekuensi': None, 'alat': None, 'mode': 'noob'})
+            
+        return profil
+    except Exception as e:
+        logger.error(f"get_gym_profile error: {e}"); return None
+
+def save_gym_profile(user_id, data):
+    try:
+        conn = get_db(); c = conn.cursor()
+        c.execute('''INSERT OR REPLACE INTO gym_profile (user_id, target, level, pengalaman, frekuensi, alat, mode) VALUES (?, ?, ?, ?, ?, ?, ?)''', (str(user_id), data.get('target'), data.get('level'), data.get('pengalaman'), data.get('frekuensi'), data.get('alat'), data.get('mode', 'noob')))
+        conn.commit(); conn.close(); return True
+    except Exception as e:
+        logger.error(f"save_gym_profile error: {e}"); return False
+
+# --- FUNGSI CHAT & CACHE ---
 def simpan_ke_db(user_id, username, teks_asli, teks_rapi):
     try:
         conn = get_db(); cursor = conn.cursor()
@@ -78,24 +134,7 @@ def hapus_chat_history(user_id):
         conn.commit(); conn.close(); return True
     except Exception as e: logger.error(f"hapus_chat_history error: {e}"); return False
 
-def get_gym_profile(user_id):
-    try:
-        conn = get_db(); c = conn.cursor()
-        c.execute('''SELECT mode, umur, berat, tinggi, jenis_kelamin, target, level, pengalaman, frekuensi, alat FROM gym_profile WHERE user_id = ?''', (str(user_id),))
-        row = c.fetchone(); conn.close()
-        if not row: return None
-        return {'mode': row[0] or 'noob', 'umur': row[1], 'berat': row[2], 'tinggi': row[3], 'jenis_kelamin': row[4], 'target': row[5], 'level': row[6], 'pengalaman': row[7], 'frekuensi': row[8], 'alat': row[9]}
-    except Exception as e: logger.error(f"get_gym_profile error: {e}"); return None
-
-def save_gym_profile(user_id, data):
-    try:
-        conn = get_db(); c = conn.cursor()
-        c.execute('''INSERT OR REPLACE INTO gym_profile (user_id, mode, umur, berat, tinggi, jenis_kelamin, target, level, pengalaman, frekuensi, alat, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)''', (str(user_id), data.get('mode', 'noob'), data.get('umur'), data.get('berat'), data.get('tinggi'), data.get('jenis_kelamin'), data.get('target'), data.get('level'), data.get('pengalaman'), data.get('frekuensi'), data.get('alat')))
-        conn.commit(); conn.close(); return True
-    except Exception as e: logger.error(f"save_gym_profile error: {e}"); return False
-
-# --- FUNGSI KALORI & GULA TRACKER ---
-
+# --- FUNGSI KALORI, GULA, AIR, BERAT ---
 def cek_duplikat_foto(user_id, photo_hash):
     try:
         conn = get_db(); c = conn.cursor()
@@ -160,8 +199,6 @@ def hapus_log_terakhir(user_id):
         affected = c.rowcount; conn.commit(); conn.close(); return affected > 0
     except Exception as e: logger.error(f"hapus_log_terakhir error: {e}"); return False
 
-# --- FUNGSI WATER & WEIGHT TRACKER ---
-
 def tambah_air(user_id, ml):
     try:
         conn = get_db(); c = conn.cursor()
@@ -190,8 +227,14 @@ def tambah_berat_badan(user_id, berat):
 def get_berat_terakhir(user_id):
     try:
         conn = get_db(); c = conn.cursor()
-        # Ambil 2 data terakhir buat bandingin
         c.execute("SELECT berat, tanggal FROM weight_logs WHERE user_id = ? ORDER BY id DESC LIMIT 2", (str(user_id),))
-        rows = c.fetchall(); conn.close()
-        return rows
+        rows = c.fetchall(); conn.close(); return rows
     except Exception as e: logger.error(f"get_berat_terakhir error: {e}"); return []
+
+def hapus_semua_berat(user_id):
+    try:
+        conn = get_db(); c = conn.cursor()
+        c.execute("DELETE FROM weight_logs WHERE user_id = ?", (str(user_id),))
+        conn.commit(); conn.close(); return True
+    except Exception as e:
+        logger.error(f"hapus_semua_berat error: {e}"); return False
