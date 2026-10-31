@@ -2,7 +2,6 @@ from telebot import types
 
 def buat_menu_utama():
     markup = types.InlineKeyboardMarkup(row_width=2)
-    
     btn_rapih = types.InlineKeyboardButton("📝 Perapih Teks", callback_data="menu_rapih")
     btn_chat = types.InlineKeyboardButton("💬 AI Chat", callback_data="menu_chat")
     btn_gym_mode = types.InlineKeyboardButton("🏋️‍♂️ GYM MODE", callback_data="menu_gym_mode")
@@ -15,11 +14,11 @@ def buat_menu_utama():
     markup.add(btn_stats, btn_help)
     return markup
 
-def teks_menu_utama():
+def teks_menu_utama(ringkasan=""):
     return (
         "🏠 *MENU UTAMA*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Selamat datang di *Bot Serba Guna*! 🤖\n\n"
+        f"{ringkasan}\n\n"
         "Pilih fitur yang lu mau pakai dengan pencet tombol di bawah:\n\n"
         "📝 *Perapih Teks* — ubah bahasa gaul jadi baku\n"
         "💬 *AI Chat* — ngobrol bebas kayak ChatGPT\n"
@@ -32,7 +31,6 @@ def teks_menu_utama():
 
 def buat_menu_gym_mode():
     markup = types.InlineKeyboardMarkup(row_width=2)
-    
     btn_makan = types.InlineKeyboardButton("🍎 Kalori & Gula", callback_data="menu_kalori")
     btn_progress = types.InlineKeyboardButton("💧 Progress & Air", callback_data="menu_progress")
     btn_meal = types.InlineKeyboardButton("🍳 Meal Planner", callback_data="menu_meal_planner")
@@ -55,9 +53,16 @@ def teks_menu_gym_mode():
         "👇 *Pilih menu di bawah:*"
     )
 
-# UPDATE: Balikin tombol kembali global ke menu_utama
+# TOMBOL GENDER BARU
+def buat_tombol_gender():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    btn_l = types.InlineKeyboardButton("🙎‍♂️ Laki-laki", callback_data="onboard_gender_L")
+    btn_p = types.InlineKeyboardButton("🙎‍♀️ Perempuan", callback_data="onboard_gender_P")
+    markup.add(btn_l, btn_p)
+    return markup
+
 def tombol_kembali():
     markup = types.InlineKeyboardMarkup()
-    btn = types.InlineKeyboardButton("🔙 Kembali ke Menu Utama", callback_data="menu_utama")
+    btn = types.InlineKeyboardButton("🔙 Kembali", callback_data="menu_utama")
     markup.add(btn)
     return markup
