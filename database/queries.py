@@ -33,13 +33,10 @@ def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
     except Exception as e: logger.error(f"save_user_profile error: {e}"); return False
 
 def update_user_weight(user_id, berat_baru):
-    """Fungsi sakti buat update berat badan di profil & history log"""
     try:
         conn = get_db(); c = conn.cursor()
         berat_float = float(parse_number(berat_baru))
-        # 1. Update profil utama
         c.execute("UPDATE user_profiles SET berat = ? WHERE user_id = ?", (berat_float, str(user_id)))
-        # 2. Insert ke history berat badan
         tanggal_ini = datetime.date.today().isoformat()
         c.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES (?, ?, ?)", (str(user_id), tanggal_ini, berat_float))
         conn.commit(); conn.close(); return True
@@ -218,3 +215,20 @@ def get_berat_terakhir(user_id):
         c.execute("SELECT berat, tanggal FROM weight_logs WHERE user_id = ? ORDER BY id DESC LIMIT 2", (str(user_id),))
         rows = c.fetchall(); conn.close(); return rows
     except Exception as e: logger.error(f"get_berat_terakhir error: {e}"); return []
+
+# --- FUNGSI EXPORT CSV ---
+def get_all_data_for_export(user_id):
+    try:
+        conn = get_db(); c = conn.cursor()
+        c.execute("SELECT tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula, waktu FROM food_logs WHERE user_id = ? ORDER BY tanggal DESC", (str(user_id),))
+        food_data = c.fetchall()
+        
+        c.execute("SELECT tanggal, ml, waktu FROM water_logs WHERE user_id = ? ORDER BY tanggal DESC", (str(user_id),))
+        water_data = c.fetchall()
+        
+        c.execute("SELECT tanggal, berat, waktu FROM weight_logs WHERE user_id = ? ORDER BY tanggal DESC", (str(user_id),))
+        weight_data = c.fetchall()
+        
+        conn.close()
+        return food_data, water_data, weight_data
+    except Exception as e: logger.error(f"get_all_data_for_export error: {e}"); return [], [], []

@@ -32,11 +32,12 @@ import handlers.gym
 import handlers.calorie
 import handlers.voice
 import handlers.progress
-import handlers.meal_planner # <--- TAMBAHAN BARU
+import handlers.meal_planner
+import handlers.export # <--- TAMBAHAN BARU
 import handlers.downloader
 import handlers.router
 
 if __name__ == "__main__":
     setup_db()
-    logger.info("🚀 Bot Full Power V14 (GYM MODE) berhasil jalan!")
+    logger.info("🚀 Bot Full Power V16 (Gemini + CSV) berhasil jalan!")
     bot.infinity_polling()

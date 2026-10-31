@@ -35,11 +35,13 @@ def buat_menu_gym_mode():
     btn_progress = types.InlineKeyboardButton("💧 Progress & Air", callback_data="menu_progress")
     btn_meal = types.InlineKeyboardButton("🍳 Meal Planner", callback_data="menu_meal_planner")
     btn_program = types.InlineKeyboardButton("💪 Profil & Program", callback_data="menu_gym")
+    btn_export = types.InlineKeyboardButton("📥 Export Laporan CSV", callback_data="menu_export") # TOMBOL BARU
     btn_chat_pt = types.InlineKeyboardButton("💬 Chat PT AI", callback_data="menu_chat")
     btn_back = types.InlineKeyboardButton("🔙 Kembali ke Menu Utama", callback_data="menu_utama")
     
     markup.add(btn_makan, btn_progress)
     markup.add(btn_meal, btn_program)
+    markup.add(btn_export) # PASANG DI SINI
     markup.add(btn_chat_pt)
     markup.add(btn_back)
     return markup
@@ -53,7 +55,6 @@ def teks_menu_gym_mode():
         "👇 *Pilih menu di bawah:*"
     )
 
-# TOMBOL GENDER BARU
 def buat_tombol_gender():
     markup = types.InlineKeyboardMarkup(row_width=2)
     btn_l = types.InlineKeyboardButton("🙎‍♂️ Laki-laki", callback_data="onboard_gender_L")
