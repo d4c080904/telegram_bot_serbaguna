@@ -8,6 +8,9 @@ from utils.helpers import hitung_bmi, kategori_bmi
 
 logger = logging.getLogger(__name__)
 
+# --- GANTI MODEL DI SINI KALO GOOGLE UPDATE LAGI ---
+MODEL_AI = 'gemini-3.8-flash'
+
 def perbaiki_teks_dengan_ai(teks):
     key = buat_cache_key("rapih", teks)
     cached = cache_get(key)
@@ -17,7 +20,7 @@ def perbaiki_teks_dengan_ai(teks):
     
     try:
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=MODEL_AI,
             contents=prompt
         )
         hasil_ai = response.text.strip().split('\n')[0].strip()
@@ -35,7 +38,7 @@ def terjemahkan_ke_inggris(teks):
     prompt = f"Terjemahkan ke bahasa Inggris natural. TANPA PENJELASAN!\nTeks: {teks}\nHasil:"
     try:
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=MODEL_AI,
             contents=prompt
         )
         hasil_ai = response.text.strip().split('\n')[0].strip()
@@ -51,21 +54,24 @@ def chat_dengan_ai(user_id, pesan_baru):
     nama = user['nama'] if user else "Bro"
     profil_str = f"User bernama {nama}, BB {user['berat']}kg, TB {user['tinggi']}cm." if user else ""
     
-    system_prompt = (
+    system_instruction = (
         f"Kamu adalah asisten AI santai, ramah, dan pintar. {profil_str} "
         "Jawab dengan jelas, JANGAN bertele-tele. "
         "ATURAN FORMAT: JANGAN pakai markdown (** atau *). Tulis teks polos aja."
     )
     
-    contents = [system_prompt]
+    contents = []
     for msg in history:
-        contents.append(f"{msg['role']}: {msg['content']}")
-    contents.append(f"user: {pesan_baru}")
+        role = "user" if msg['role'] == 'user' else "model"
+        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg['content'])]))
+    
+    contents.append(types.Content(role="user", parts=[types.Part.from_text(text=pesan_baru)]))
     
     try:
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=contents
+            model=MODEL_AI,
+            contents=contents,
+            config=types.GenerateContentConfig(system_instruction=system_instruction)
         )
         return response.text.strip()
     except Exception as e:
@@ -80,7 +86,7 @@ def analisis_gym_noob(umur, berat, tinggi):
         "JANGAN pakai markdown."
     )
     try:
-        response = gemini_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        response = gemini_client.models.generate_content(model=MODEL_AI, contents=prompt)
         return response.text.strip()
     except Exception as e: logger.warning(f"Gemini gagal (gym noob): {e}"); return None
 
@@ -92,7 +98,7 @@ def analisis_gym_pro(data):
         "JANGAN pakai markdown."
     )
     try:
-        response = gemini_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        response = gemini_client.models.generate_content(model=MODEL_AI, contents=prompt)
         return response.text.strip()
     except Exception as e: logger.warning(f"Gemini gagal (gym pro): {e}"); return None
 
@@ -104,7 +110,7 @@ def analisis_foto_makanan(image_bytes, caption=""):
     )
     try:
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=MODEL_AI,
             contents=[
                 prompt_text,
                 types.Part.from_bytes(data=image_bytes, mime_type='image/jpeg')
@@ -124,7 +130,7 @@ def koreksi_foto_makanan(koreksi_user):
     )
     try:
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=MODEL_AI,
             contents=prompt_text,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -134,13 +140,12 @@ def koreksi_foto_makanan(koreksi_user):
         return None
 
 def transkripsi_audio(audio_file_path):
-    """Transkripsi audio pakai Gemini Vision/Audio"""
     try:
         with open(audio_file_path, "rb") as f:
             audio_bytes = f.read()
             
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=MODEL_AI,
             contents=[
                 "Tolong transkrip audio ini ke dalam teks bahasa Indonesia. Jangan tambahkan kata pengantar.",
                 types.Part.from_bytes(data=audio_bytes, mime_type='audio/ogg')
@@ -174,7 +179,7 @@ def proses_voice_note(teks):
     """
     try:
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=MODEL_AI,
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -189,6 +194,6 @@ def rekomendasi_makanan(sisa_kalori, sisa_protein, sisa_karbo, sisa_lemak, targe
         "Kasih 1 resep yang kalorinya < sisa kalori, tinggi protein, bahan lokal, cara singkat. Teks polos + emoji. Max 150 kata."
     )
     try:
-        response = gemini_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        response = gemini_client.models.generate_content(model=MODEL_AI, contents=prompt)
         return response.text.strip()
     except Exception as e: logger.warning(f"Gemini gagal (meal planner): {e}"); return None
