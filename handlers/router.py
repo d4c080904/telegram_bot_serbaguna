@@ -14,6 +14,7 @@ from handlers.chat import proses_chat
 from handlers.gym import proses_gym_wizard
 from handlers.start import proses_onboarding
 from handlers.calorie import _waiting_food_photo, proses_foto_makanan, tampil_dashboard_kalori
+from handlers.equipment import _waiting_equipment_photo, proses_foto_alat
 from telebot import types
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 def respon_pesan(pesan):
     try:
         teks_asli = pesan.text.strip()
-        user_id = pesan.from_user.id
+        user_id = str(pesan.from_user.id)
 
         # 1. CEK ONBOARDING DULU
         onboarding = get_onboarding_wizard(user_id)
@@ -31,13 +32,13 @@ def respon_pesan(pesan):
             proses_onboarding(pesan)
             return
 
-        # 2. CEK GYM WIZARD
+        # 2. CEK GYM WIZARD (INPUT DATA PRO)
         wizard = get_gym_wizard(user_id)
         if wizard:
             proses_gym_wizard(pesan, wizard)
             return
 
-        # 3. FITUR KOREKSI KALORI
+        # 3. FITUR KOREKSI KALORI (REPLY TO FIX)
         if pesan.reply_to_message:
             if cek_id_makanan(user_id, pesan.reply_to_message.message_id):
                 bot.send_chat_action(pesan.chat.id, 'typing')
@@ -55,24 +56,27 @@ def respon_pesan(pesan):
                         tampil_dashboard_kalori(pesan.chat.id, user_id)
                         return
                     else:
-                        bot.edit_message_text("❌ Gagal update database. Pastikan lu reply pesan *✅ Berhasil Dicatat!* atau *Foto Makanan* ya.", pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown')
+                        bot.edit_message_text("❌ Gagal update database.", pesan.chat.id, pesan_tunggu.message_id)
                         return
                 else:
                     bot.edit_message_text("❌ AI gagal memproses koreksi.", pesan.chat.id, pesan_tunggu.message_id)
                     return
             
+            # Kalau nge-reply dashboard kalori
             elif pesan.reply_to_message.from_user.id == bot.get_me().id:
                 if "FOOD & SUGAR TRACKER" in (pesan.reply_to_message.text or "") or "KALORI TRACKER" in (pesan.reply_to_message.text or ""):
-                    bot.reply_to(pesan, "⚠️ *Pesan yang lu reply itu Dashboard, bukan detail makanannya.*\n\nBiar bisa dikoreksi, tolong reply pesan *Foto Makanan* lu, atau reply pesan *✅ Berhasil Dicatat!* dari bot.", parse_mode='Markdown')
+                    bot.reply_to(pesan, "⚠️ *Pesan yang lu reply itu Dashboard, bukan detail makanannya.*\n\nBiar bisa dikoreksi, tolong reply pesan *Foto Makanan* atau *✅ Berhasil Dicatat!* ya.", parse_mode='Markdown')
                     return
 
+        # 4. CEK APAKAH ADA LINK (DOWNLOADER)
         ada_link = ("tiktok.com" in teks_asli.lower() or "instagram.com" in teks_asli.lower() or "youtu" in teks_asli.lower())
 
+        # 5. CEK CHAT MODE AI
         if is_chat_mode(user_id) and not ada_link:
             proses_chat(pesan)
             return
 
-        # 4. DOWNLOADER & TEKS BIASA
+        # 6. PROSES DOWNLOADER
         if "tiktok.com" in teks_asli.lower():
             bot.send_chat_action(pesan.chat.id, 'upload_video')
             pesan_tunggu = bot.reply_to(pesan, "⏳ _Sedot video TikTok dulu bos, bentar yak..._", parse_mode="Markdown")
@@ -134,6 +138,7 @@ def respon_pesan(pesan):
                         bot.reply_to(pesan, "❌ Gagal ambil postingan IG. Kemungkinan akunnya private, link salah, atau IG nge-blok bot.")
                 else:
                     bot.reply_to(pesan, "❌ Gagal sedot video.")
+
                 if berhasil:
                     simpan_ke_db(user_id, pesan.from_user.username, teks_asli, tipe_db)
             except Exception as e:
@@ -147,6 +152,7 @@ def respon_pesan(pesan):
                     try: os.remove(sisa)
                     except Exception: pass
 
+        # 7. JIKA BUKAN LINK & BUKAN CHAT MODE (MODE PERAPIH TEKS)
         else:
             bot.send_chat_action(pesan.chat.id, 'typing')
             teks_rapi = perbaiki_teks_dengan_ai(teks_asli)
@@ -164,7 +170,11 @@ def respon_pesan(pesan):
 @bot.message_handler(content_types=['photo'])
 def handle_photo(pesan):
     user_id = str(pesan.from_user.id)
+    
+    # Cek prioritas: lagi scan makanan atau scan alat?
     if user_id in _waiting_food_photo:
         proses_foto_makanan(pesan)
+    elif user_id in _waiting_equipment_photo:
+        proses_foto_alat(pesan)
     else:
-        bot.reply_to(pesan, "📸 Foto diterima. Kalau mau scan kalori, masuk ke menu 🍎 *Kalori & Gula* dulu ya.", parse_mode='Markdown')
+        bot.reply_to(pesan, "📸 Foto diterima. Kalau mau scan kalori, masuk ke menu 🍎 *Kalori & Gula*. Kalau mau scan alat gym, masuk ke *🔍 Scan Alat Gym*.", parse_mode='Markdown')

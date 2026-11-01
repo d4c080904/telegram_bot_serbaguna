@@ -1,5 +1,6 @@
 import time
 import logging
+import threading
 from functools import wraps
 from collections import defaultdict
 from config import RATE_LIMIT_MAX, RATE_LIMIT_WINDOW
@@ -7,7 +8,7 @@ from bot_instance import bot
 
 logger = logging.getLogger(__name__)
 _rate_limit_store = defaultdict(list)
-_rate_limit_lock = __import__('threading').Lock()
+_rate_limit_lock = threading.Lock()
 
 def cek_rate_limit(user_id):
     now = time.time()

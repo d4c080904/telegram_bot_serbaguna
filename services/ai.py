@@ -1,159 +1,177 @@
 import logging
 import json
 import os
-from google.genai import types
-from bot_instance import gemini_client
+import base64
+from bot_instance import groq_client
+from config import PRIORITAS_MODEL
 from database.queries import cache_get, cache_set, buat_cache_key, ambil_chat_history, get_user_profile
 from utils.helpers import hitung_bmi, kategori_bmi
 
 logger = logging.getLogger(__name__)
 
-# --- GANTI MODEL DI SINI KALO GOOGLE UPDATE LAGI ---
-MODEL_AI = 'gemini-3.8-flash'
+print("Mengecek daftar model Groq...")
+try:
+    daftar_model = groq_client.models.list()
+    semua_model = [m.id for m in daftar_model.data if "whisper" not in m.id and "guard" not in m.id and "orpheus" not in m.id and "tts" not in m.id]
+    MODEL_GROQ_LIST = []
+    for prioritas in PRIORITAS_MODEL:
+        if prioritas in semua_model:
+            MODEL_GROQ_LIST.append(prioritas)
+            semua_model.remove(prioritas)
+    MODEL_GROQ_LIST.extend(semua_model)
+    
+    if not MODEL_GROQ_LIST:
+        MODEL_GROQ_LIST = ["llama-3.1-8b-instant"]
+        
+    logger.info(f"✅ {len(MODEL_GROQ_LIST)} model Groq siap")
+    logger.info(f"🥇 Model utama: {MODEL_GROQ_LIST[0]}")
+except Exception as e:
+    logger.warning(f"Gagal ambil model Groq: {e}")
+    MODEL_GROQ_LIST = ["llama-3.1-8b-instant"]
+
+# Model vision yang kita pake buat baca gambar
+MODEL_VISION = "qwen/qwen3.8-27b"
 
 def perbaiki_teks_dengan_ai(teks):
     key = buat_cache_key("rapih", teks)
     cached = cache_get(key)
     if cached: return cached
-    
-    prompt = f"Kamu adalah mesin pengubah bahasa gaul/singkatan Indonesia menjadi bahasa Indonesia baku. DILARANG KERAS memberikan penjelasan. KEMBALIKAN TEKS BAKUNYA SAJA!\nTeks: {teks}\nHasil:"
-    
-    try:
-        response = gemini_client.models.generate_content(
-            model=MODEL_AI,
-            contents=prompt
-        )
-        hasil_ai = response.text.strip().split('\n')[0].strip()
-        if hasil_ai:
-            cache_set(key, hasil_ai); return hasil_ai
-    except Exception as e:
-        logger.warning(f"Gemini gagal (rapih): {e}")
+    for model_name in MODEL_GROQ_LIST:
+        try:
+            response = groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "Kamu adalah mesin pengubah bahasa gaul/singkatan Indonesia menjadi bahasa Indonesia baku. DILARANG KERAS memberikan penjelasan, peringatan, atau kata pengantar. KEMBALIKAN TEKS BAKUNYA SAJA!"},
+                    {"role": "user", "content": f"Teks: {teks}\nHasil:"}
+                ], model=model_name, temperature=0.0,
+            )
+            hasil_ai = response.choices[0].message.content.strip()
+            hasil_ai = hasil_ai.replace("Hasil:", "").replace("Teks:", "").strip().split('\n')[0].strip()
+            if hasil_ai:
+                cache_set(key, hasil_ai); return hasil_ai
+        except Exception as e:
+            logger.warning(f"Model {model_name} gagal (rapih): {e}"); continue
     return ""
 
 def terjemahkan_ke_inggris(teks):
     key = buat_cache_key("translate", teks)
     cached = cache_get(key)
     if cached: return cached
-    
     prompt = f"Terjemahkan ke bahasa Inggris natural. TANPA PENJELASAN!\nTeks: {teks}\nHasil:"
-    try:
-        response = gemini_client.models.generate_content(
-            model=MODEL_AI,
-            contents=prompt
-        )
-        hasil_ai = response.text.strip().split('\n')[0].strip()
-        if hasil_ai: cache_set(key, hasil_ai); return hasil_ai
-    except Exception as e:
-        logger.warning(f"Gemini gagal (translate): {e}")
+    for model_name in MODEL_GROQ_LIST:
+        try:
+            response = groq_client.chat.completions.create(messages=[{"role": "user", "content": prompt}], model=model_name, temperature=0.3)
+            hasil_ai = response.choices[0].message.content.strip().split('\n')[0].strip()
+            if hasil_ai: cache_set(key, hasil_ai); return hasil_ai
+        except Exception as e:
+            logger.warning(f"Model {model_name} gagal (translate): {e}"); continue
     return "Sorry, translation failed."
 
 def chat_dengan_ai(user_id, pesan_baru):
     history = ambil_chat_history(user_id)
     user = get_user_profile(user_id)
-    
     nama = user['nama'] if user else "Bro"
     profil_str = f"User bernama {nama}, BB {user['berat']}kg, TB {user['tinggi']}cm." if user else ""
     
-    system_instruction = (
-        f"Kamu adalah asisten AI santai, ramah, dan pintar. {profil_str} "
-        "Jawab dengan jelas, JANGAN bertele-tele. "
-        "ATURAN FORMAT: JANGAN pakai markdown (** atau *). Tulis teks polos aja."
+    system_prompt = (
+        f"Kamu adalah asisten AI yang santai, ramah, dan pintar. {profil_str} "
+        "Pakai bahasa Indonesia gaul (gw/lu) tapi tetap sopan. "
+        "Jawab dengan jelas, JANGAN bertele-tele. Kalau nggak tau jawabannya, jujur aja bilang 'gw kurang tau'. "
+        "JANGAN pernah mengarang fakta atau nama yang nggak jelas. Kalau user nanya hal sensitif/ilegal, tolak dengan sopan. "
+        "ATURAN FORMAT: JANGAN pakai format markdown apapun. Dilarang pakai tanda **, *, _, #, `, atau ```. "
+        "Tulis dengan teks polos aja. Boleh pakai tanda baca biasa (-, •, 1. 2. 3.) dan emoji kalau perlu."
     )
-    
-    contents = []
-    for msg in history:
-        role = "user" if msg['role'] == 'user' else "model"
-        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg['content'])]))
-    
-    contents.append(types.Content(role="user", parts=[types.Part.from_text(text=pesan_baru)]))
-    
-    try:
-        response = gemini_client.models.generate_content(
-            model=MODEL_AI,
-            contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction)
-        )
-        return response.text.strip()
-    except Exception as e:
-        logger.warning(f"Gemini gagal (chat): {e}")
+    messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": pesan_baru}]
+    for model_name in MODEL_GROQ_LIST:
+        try:
+            response = groq_client.chat.completions.create(
+                messages=messages, model=model_name, temperature=0.5, max_tokens=1024,
+                frequency_penalty=0.5, presence_penalty=0.5
+            )
+            hasil = response.choices[0].message.content.strip()
+            if hasil: return hasil
+        except Exception as e:
+            logger.warning(f"Model {model_name} gagal (chat): {e}"); continue
     return None
 
 def analisis_gym_noob(umur, berat, tinggi):
     bmi = hitung_bmi(berat, tinggi); kategori = kategori_bmi(bmi)
-    prompt = (
-        f"Kamu adalah personal trainer ramah. Klien: {umur}th, {berat}kg, {tinggi}cm, BMI: {bmi} ({kategori}). "
-        "Kasih panduan: 1. Kondisi. 2. Program minggu 1. 3. Tips makan. 4. 3 kesalahan pemula. 5. Motivasi. Max 500 kata. "
-        "JANGAN pakai markdown."
-    )
-    try:
-        response = gemini_client.models.generate_content(model=MODEL_AI, contents=prompt)
-        return response.text.strip()
-    except Exception as e: logger.warning(f"Gemini gagal (gym noob): {e}"); return None
+    system_prompt = "Kamu adalah personal trainer berpengalaman yang ramah. Klien kamu BARU MULAI gym, jelaskan sederhana & gaul. WAJIB pakai bahasa Indonesia (bukan Melayu). JANGAN pakai markdown, tulis teks polos. JANGAN mengulang kata yang sama berkali-kali. Berhenti jika sudah selesai."
+    user_prompt = f"Data Klien: {umur}th, {berat}kg, {tinggi}cm, BMI: {bmi} ({kategori}). Kasih panduan: 1. Ringkasan kondisi. 2. Program minggu 1. 3. Tips makan. 4. 3 kesalahan pemula. 5. Motivasi. Max 500 kata."
+    for model_name in MODEL_GROQ_LIST:
+        try:
+            response = groq_client.chat.completions.create(
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
+                model=model_name, temperature=0.5, max_tokens=1500, frequency_penalty=0.5, presence_penalty=0.5
+            )
+            hasil = response.choices[0].message.content.strip()
+            if hasil: return hasil
+        except Exception as e: logger.warning(f"Gagal (gym noob): {e}"); continue
+    return None
 
 def analisis_gym_pro(data):
     bmi = hitung_bmi(data.get('berat'), data.get('tinggi')); kategori = kategori_bmi(bmi)
-    prompt = (
-        f"Kamu personal trainer elite. Klien: {data.get('umur')}th, {data.get('berat')}kg, {data.get('tinggi')}cm, Target: {data.get('target')}, Level: {data.get('level')}. "
-        "Kasih analisis advanced: 1. Komposisi. 2. Split program. 3. Kalori & makro. 4. Periodization. 5. Weak point. Max 700 kata. "
-        "JANGAN pakai markdown."
-    )
-    try:
-        response = gemini_client.models.generate_content(model=MODEL_AI, contents=prompt)
-        return response.text.strip()
-    except Exception as e: logger.warning(f"Gemini gagal (gym pro): {e}"); return None
+    gender_label = "Laki-laki" if data.get('jenis_kelamin') == 'L' else "Perempuan"
+    alat_label = {'gym_full': 'Gym lengkap', 'home_dumbbell': 'Rumahan + dumbbell', 'home_barbell': 'Rumahan + barbell', 'bodyweight': 'Bodyweight only'}.get(data.get('alat'), data.get('alat', 'N/A'))
+    system_prompt = "Kamu adalah personal trainer elite. Klien kamu sudah pengalaman, jawab detail teknis advanced. WAJIB pakai bahasa Indonesia gaul (bukan Melayu). JANGAN pakai markdown. JANGAN mengulang kata yang sama berkali-kali. Berhenti jika sudah selesai."
+    user_prompt = f"Data Pro: {data.get('umur')}th, {data.get('berat')}kg, {data.get('tinggi')}cm, {gender_label}, BMI: {bmi} ({kategori}), Target: {data.get('target')}, Level: {data.get('level')}, Pengalaman: {data.get('pengalaman')}th, Frekuensi: {data.get('frekuensi')}x/mgg, Alat: {alat_label}. Kasih analisis advanced: 1. Analisis komposisi. 2. Split program. 3. Kalori & makro. 4. Saran periodization. 5. Weak point. 6. Suplemen. Max 700 kata."
+    for model_name in MODEL_GROQ_LIST:
+        try:
+            response = groq_client.chat.completions.create(
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
+                model=model_name, temperature=0.5, max_tokens=2000, frequency_penalty=0.5, presence_penalty=0.5
+            )
+            hasil = response.choices[0].message.content.strip()
+            if hasil: return hasil
+        except Exception as e: logger.warning(f"Gagal (gym pro): {e}"); continue
+    return None
 
 def analisis_foto_makanan(image_bytes, caption=""):
-    prompt_text = (
-        "Analisis foto makanan ini. "
-        "Berikan output HANYA format JSON murni dengan key: nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula. "
-        f"Caption: {caption}"
-    )
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    prompt_text = "Analisis foto makanan ini sebagai ahli gizi. Berikan output HANYA format JSON murni dengan key: nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula. Perkirakan gula (dalam gram) secara realistis. Caption: " + caption
+    user_content = [
+        {"type": "text", "text": prompt_text},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+    ]
     try:
-        response = gemini_client.models.generate_content(
-            model=MODEL_AI,
-            contents=[
-                prompt_text,
-                types.Part.from_bytes(data=image_bytes, mime_type='image/jpeg')
-            ],
-            config=types.GenerateContentConfig(response_mime_type="application/json")
+        response = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": user_content}],
+            model=MODEL_VISION,
+            temperature=0.2,
+            max_completion_tokens=500,
+            response_format={"type": "json_object"}
         )
-        return json.loads(response.text)
+        return json.loads(response.choices[0].message.content.strip())
     except Exception as e:
-        logger.error(f"Gemini Vision Error: {e}")
+        logger.error(f"Vision API Error: {e}")
         return None
 
 def koreksi_foto_makanan(koreksi_user):
-    prompt_text = (
-        f"User mengoreksi makanan sebelumnya: '{koreksi_user}'. "
-        "Ganti HANYA item yang salah. Hitung ulang TOTAL kalori & makro. "
-        "Output JSON murni: nama_makanan (string), estimasi_porsi, kalori, protein, karbo, lemak, gula."
-    )
+    prompt_text = f"User mengoreksi analisis makanan sebelumnya. Koreksi: '{koreksi_user}'. Ganti HANYA item makanan yang salah koreksi. Hitung ulang TOTAL kalori, makro, dan gula. Output HANYA format JSON murni: nama_makanan (HARUS TEKS STRING), estimasi_porsi, kalori, protein, karbo, lemak, gula."
     try:
-        response = gemini_client.models.generate_content(
-            model=MODEL_AI,
-            contents=prompt_text,
-            config=types.GenerateContentConfig(response_mime_type="application/json")
+        response = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt_text}],
+            model=MODEL_VISION,
+            temperature=0.2,
+            max_completion_tokens=500,
+            response_format={"type": "json_object"}
         )
-        return json.loads(response.text)
+        return json.loads(response.choices[0].message.content.strip())
     except Exception as e:
-        logger.error(f"Gemini Koreksi Error: {e}")
+        logger.error(f"Koreksi API Error: {e}")
         return None
 
 def transkripsi_audio(audio_file_path):
     try:
-        with open(audio_file_path, "rb") as f:
-            audio_bytes = f.read()
-            
-        response = gemini_client.models.generate_content(
-            model=MODEL_AI,
-            contents=[
-                "Tolong transkrip audio ini ke dalam teks bahasa Indonesia. Jangan tambahkan kata pengantar.",
-                types.Part.from_bytes(data=audio_bytes, mime_type='audio/ogg')
-            ]
-        )
-        return response.text.strip()
+        with open(audio_file_path, "rb") as file:
+            transcription = groq_client.audio.transcriptions.create(
+                file=(os.path.basename(audio_file_path), file.read()),
+                model="whisper-large-v3-turbo",
+                response_format="text",
+                language="id"
+            )
+        return transcription.strip()
     except Exception as e:
-        logger.error(f"Gemini Audio Error: {e}")
+        logger.error(f"Whisper Error: {e}")
         return None
 
 def proses_voice_note(teks):
@@ -161,13 +179,9 @@ def proses_voice_note(teks):
     Kamu adalah asisten AI serba bisa. User baru saja mengirim pesan suara dengan transkripsi berikut:
     "{teks}"
 
-    Analisis teks tersebut dan tentukan aksi yang harus dilakukan.
     Output HANYA JSON murni dengan format:
     {{
-      "food_data": {{
-        "nama_makanan": "string", "estimasi_porsi": "string", "kalori": number,
-        "protein": number, "karbo": number, "lemak": number, "gula": number
-      }} atau null,
+      "food_data": {{"nama_makanan": "string", "estimasi_porsi": "string", "kalori": number, "protein": number, "karbo": number, "lemak": number, "gula": number}} atau null,
       "gym_data": "string (deskripsi latihan)" atau null,
       "chat_reply": "string (balasan natural)" atau null
     }}
@@ -178,22 +192,53 @@ def proses_voice_note(teks):
     - Jika user cuma ngobrol, isi `chat_reply`. Kosongkan `food_data` dan `gym_data`.
     """
     try:
-        response = gemini_client.models.generate_content(
-            model=MODEL_AI,
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json")
+        response = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="qwen/qwen3.8-27b",
+            temperature=0.1,
+            max_completion_tokens=500,
+            response_format={"type": "json_object"}
         )
-        return json.loads(response.text)
+        return json.loads(response.choices[0].message.content.strip())
     except Exception as e:
-        logger.error(f"Gemini Voice Intent Error: {e}")
+        logger.error(f"Voice Intent Error: {e}")
         return None
 
 def rekomendasi_makanan(sisa_kalori, sisa_protein, sisa_karbo, sisa_lemak, target_user):
-    prompt = (
-        f"Kamu Chef & Ahli Gizi. Target user: {target_user}. Sisa kalori: {sisa_kalori} kcal. Sisa Protein: {sisa_protein}g. "
-        "Kasih 1 resep yang kalorinya < sisa kalori, tinggi protein, bahan lokal, cara singkat. Teks polos + emoji. Max 150 kata."
+    prompt = f"Kamu adalah Chef & Ahli Gizi. Target: {target_user}. Sisa kalori: {sisa_kalori} kcal. Protein kurang: {sisa_protein}g. Kasih 1 resep yang kalorinya < sisa kalori, tinggi protein, bahan lokal. Teks polos + emoji. Max 150 kata."
+    for model_name in MODEL_GROQ_LIST:
+        try:
+            response = groq_client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model=model_name, temperature=0.7, max_tokens=500
+            )
+            hasil = response.choices[0].message.content.strip()
+            if hasil: return hasil
+        except Exception: continue
+    return None
+
+def analisis_alat_gym(image_bytes):
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    prompt_text = (
+        "Kamu adalah personal trainer berpengalaman. Identifikasi alat gym pada foto ini. "
+        "Berikan output teks polos (tanpa markdown) dengan format:\n"
+        "🏋️ Nama Alat: [Nama Alat]\n"
+        "💪 Otot yang Dilatih: [Otot]\n"
+        "📖 Cara Pakai: [Instruksi singkat & aman]\n\n"
+        "JANGAN pakai tanda bintang ** atau *."
     )
+    user_content = [
+        {"type": "text", "text": prompt_text},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+    ]
     try:
-        response = gemini_client.models.generate_content(model=MODEL_AI, contents=prompt)
-        return response.text.strip()
-    except Exception as e: logger.warning(f"Gemini gagal (meal planner): {e}"); return None
+        response = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": user_content}],
+            model=MODEL_VISION,
+            temperature=0.2,
+            max_completion_tokens=500
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"Groq Equipment Error: {e}")
+        return None

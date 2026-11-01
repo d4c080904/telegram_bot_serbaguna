@@ -1,5 +1,9 @@
 from bot_instance import bot
-from keyboards.menus import buat_menu_utama, teks_menu_utama, buat_menu_gym_mode, teks_menu_gym_mode, tombol_kembali, buat_tombol_gender
+from keyboards.menus import (
+    buat_menu_utama, teks_menu_utama, 
+    buat_menu_gym_mode, teks_menu_gym_mode, 
+    tombol_kembali, buat_tombol_gender
+)
 from utils.decorators import rate_limited
 from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard
 from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir
@@ -9,11 +13,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 def buat_ringkasan_dashboard(user_id):
-    """Fungsi buat bikin progress bar visual di menu utama"""
     air = get_total_air_hari_ini(user_id)
     target_air = 2000
     persen = min((air / target_air) * 100, 100)
-    
     bar_length = 10
     filled = int(bar_length * persen / 100)
     bar = "█" * filled + "░" * (bar_length - filled)
@@ -80,7 +82,6 @@ def proses_onboarding(pesan):
             tinggi = float(teks.replace(',', '.'))
             data['tinggi'] = tinggi
             set_onboarding_wizard(user_id, 'gender', data)
-            # PAKAI TOMBOL SEKARANG
             bot.reply_to(pesan, "Terakhir nih, jenis kelamin lu apa? Pencet tombol di bawah ya 👇", reply_markup=buat_tombol_gender())
         except ValueError:
             bot.reply_to(pesan, "Tolong ketik angka aja ya.")
@@ -142,4 +143,52 @@ def callback_menu_gym_mode(call):
     except Exception as e:
         logger.error(f"[menu_gym_mode] error: {e}")
 
-# ... (handler menu_rapih, menu_stats, menu_help biarin sama kayak sebelumnya) ...
+# --- INI DIA HANDLER YANG TADI KEHAPUS ---
+@bot.callback_query_handler(func=lambda call: call.data == "menu_rapih")
+def callback_menu_rapih(call):
+    try:
+        bot.answer_callback_query(call.id)
+        teks = (
+            "📝 *MODE PERAPIH TEKS*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Kirim teks berantakan / bahasa gaul, nanti gw ubah jadi bahasa Indonesia baku.\n\n"
+            "*Contoh:*\n`gw lg males bgt nih mau ngerjain tugas`\n→ _Saya sedang sangat malas mengerjakan tugas._\n\n"
+            "Gass kirim teksnya! 👇"
+        )
+        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=tombol_kembali())
+        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=tombol_kembali())
+    except Exception as e: logger.error(f"[menu_rapih] error: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data == "menu_stats")
+def callback_menu_stats(call):
+    try:
+        user_id = call.from_user.id
+        conn = get_db(); c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM histori_chat WHERE user_id = ?", (str(user_id),))
+        jumlah = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM chat_messages WHERE user_id = ?", (str(user_id),))
+        jumlah_chat = c.fetchone()[0]
+        conn.close()
+
+        bot.answer_callback_query(call.id)
+        teks = f"📊 *STATISTIK LU*\n━━━━━━━━━━━━━━━━━━━━\n\n🔧 Pakai fitur: *{jumlah} kali*\n💬 Pesan chat AI: *{jumlah_chat} pesan*\n\n_Terus pakai bot ini biar angkanya naik!_ 🚀"
+        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=tombol_kembali())
+        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=tombol_kembali())
+    except Exception as e: logger.error(f"[menu_stats] error: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data == "menu_help")
+def callback_menu_help(call):
+    try:
+        bot.answer_callback_query(call.id)
+        teks = (
+            "❓ *BANTUAN & PANDUAN*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "*📝 Perapih Teks*\n→ Kirim teks berantakan, dirapihin otomatis\n\n"
+            "*💬 AI Chat*\n→ Ketik `/chat` atau pencet tombol di menu\n→ `/reset` hapus history\n→ `/exit` keluar dari chat\n\n"
+            "*🏋️‍♂️ GYM MODE*\n→ Fitur lengkap Kalori, Air, Meal Planner, dll.\n\n"
+            "*📥 Downloader*\n→ Paste link TikTok/IG/YouTube\n\n"
+            "*⚙️ Command lain:*\n`/start` — menu utama\n`/menu` — buka menu lagi"
+        )
+        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=tombol_kembali())
+        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=tombol_kembali())
+    except Exception as e: logger.error(f"[menu_help] error: {e}")

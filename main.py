@@ -25,7 +25,7 @@ bot.set_my_commands([
     BotCommand("stats", "📊 Statistik pemakaian lu"),
 ])
 
-# IMPORT SEMUA HANDLERS DI SINI
+# IMPORT SEMUA HANDLERS DI SINI (JANGAN DOBEL-DOBEL)
 import handlers.start
 import handlers.chat
 import handlers.gym
@@ -33,7 +33,8 @@ import handlers.calorie
 import handlers.voice
 import handlers.progress
 import handlers.meal_planner
-import handlers.export # <--- TAMBAHAN BARU
+import handlers.export
+import handlers.equipment
 import handlers.downloader
 import handlers.router
 

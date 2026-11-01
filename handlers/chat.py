@@ -56,8 +56,8 @@ def proses_chat(pesan):
 @bot.callback_query_handler(func=lambda call: call.data == "menu_chat")
 def callback_menu_chat(call):
     try:
-        set_chat_mode(call.from_user.id, True)
         bot.answer_callback_query(call.id, "💬 Chat mode aktif!")
+        set_chat_mode(call.from_user.id, True)
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("🧹 Reset History", callback_data="chat_reset"), types.InlineKeyboardButton("🔚 Keluar Chat", callback_data="chat_exit"))
         markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama"))
@@ -70,7 +70,11 @@ def callback_menu_chat(call):
 def callback_chat_exit(call):
     try:
         set_chat_mode(call.from_user.id, False)
-        bot.answer_callback_query(call.id, "✅ Keluar dari chat mode")
+        
+        # BUNGKUS ANSWER CALLBACK PAKE TRY EXCEPT
+        try: bot.answer_callback_query(call.id, "✅ Keluar dari chat mode")
+        except Exception: pass
+        
         try: bot.edit_message_text("👋 *Keluar dari Mode Chat.*\n\nSekarang lu balik ke *mode normal*.\nKetik `/chat` kapan aja kalau mau ngobrol lagi. 🚀", call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=buat_menu_utama())
         except Exception: bot.send_message(call.message.chat.id, "👋 Keluar dari mode chat.", reply_markup=buat_menu_utama())
     except Exception as e: logger.error(f"[chat_exit] error: {e}")
@@ -79,33 +83,23 @@ def callback_chat_exit(call):
 def callback_chat_reset(call):
     try:
         hapus_chat_history(call.from_user.id)
-        bot.answer_callback_query(call.id, "🧹 History dihapus!")
+        try: bot.answer_callback_query(call.id, "🧹 History dihapus!")
+        except Exception: pass
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("🔚 Keluar Chat", callback_data="chat_exit"), types.InlineKeyboardButton("🏠 Menu", callback_data="menu_utama"))
         try: bot.edit_message_text("🧹 *History Chat Dihapus!*\n\nKita mulai dari lembaran baru. Mau ngobrol apa? 😄", call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=markup)
         except Exception: pass
     except Exception as e: logger.error(f"[chat_reset] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "chat_stats")
-def callback_chat_stats(call):
-    try:
-        from database.db import get_db
-        conn = get_db(); c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM chat_messages WHERE user_id = ?", (str(call.from_user.id),)); jumlah = c.fetchone()[0]; conn.close()
-        bot.answer_callback_query(call.id, f"💬 {jumlah} pesan")
-        bot.send_message(call.message.chat.id, f"📊 *Statistik Chat Lu:*\n\n💬 Total pesan: *{jumlah}*", parse_mode='Markdown')
-    except Exception as e: logger.error(f"[chat_stats] error: {e}")
-
 @bot.callback_query_handler(func=lambda call: call.data == "terjemahkan")
 @rate_limited
 def proses_tombol_klik(call):
     try:
-        bot.answer_callback_query(call.id, "Sedang menerjemahkan...")
+        try: bot.answer_callback_query(call.id, "Sedang menerjemahkan...")
+        except Exception: pass
         bot.send_chat_action(call.message.chat.id, 'typing')
         teks_inggris = terjemahkan_ke_inggris(call.message.text)
         try: bot.reply_to(call.message, f"🗣️ *English:*\n{teks_inggris}", parse_mode='Markdown')
         except Exception: bot.reply_to(call.message, f"🗣️ English:\n{strip_markdown(teks_inggris)}")
     except Exception as e:
         logger.error(f"[callback] error: {e}")
-        try: bot.answer_callback_query(call.id, "❌ Gagal menerjemahkan.")
-        except Exception: pass

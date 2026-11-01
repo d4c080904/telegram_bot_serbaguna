@@ -5,13 +5,13 @@ load_dotenv()
 
 # --- API KEYS ---
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # Validasi
 if not TELEGRAM_TOKEN:
     raise ValueError("❌ TELEGRAM_TOKEN belum diisi di file .env!")
-if not GEMINI_API_KEY:
-    raise ValueError("❌ GEMINI_API_KEY belum diisi di file .env!")
+if not GROQ_API_KEY:
+    raise ValueError("❌ GROQ_API_KEY belum diisi di file .env!")
 
 # --- KONFIGURASI LAINNYA ---
 COOKIES_FILE = "cookies.txt"
@@ -22,6 +22,12 @@ RATE_LIMIT_MAX = 15
 RATE_LIMIT_WINDOW = 60
 CHAT_HISTORY_LIMIT = 20
 CHAT_MAX_MESSAGES = 40
+
+# Prioritas model Groq (Dari yang paling pinter ke paling cepet)
+PRIORITAS_MODEL = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+]
 
 BROWSER_HEADERS = {
     "User-Agent": (
