@@ -12,13 +12,20 @@ logger = logging.getLogger(__name__)
 
 def tampil_menu_gym(chat_id, user_id, message_id=None):
     profil = get_gym_profile(user_id)
-    nama = profil['nama'] if profil else "Bro"
     
+    # FIX: Cek profil aman
+    if profil:
+        nama = profil.get('nama') or "Bro"
+        data_text = f"{profil.get('umur') or '-'}th, {profil.get('berat') or '-'}kg, {profil.get('tinggi') or '-'}cm"
+    else:
+        nama = "Bro"
+        data_text = "Belum diisi"
+        
     teks = (
         f"💪 *ASISTEN GYM PRIBADI*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Halo *{nama}*!\n"
-        f"Data saat ini: {profil['umur']}th, {profil['berat']}kg, {profil['tinggi']}cm\n\n"
+        f"Data saat ini: {data_text}\n\n"
         "Pilih mode program latihan lu:"
     )
     
@@ -53,32 +60,32 @@ def tampil_profil_gym(chat_id, user_id, message_id=None):
         except Exception: pass
         return
         
-    bmi = hitung_bmi(profil['berat'], profil['tinggi'])
+    bmi = hitung_bmi(profil.get('berat'), profil.get('tinggi'))
     kategori = kategori_bmi(bmi)
-    mode_label = "🆕 Baru Gym" if profil['mode'] == 'noob' else "💪 Pro Gym"
+    mode_label = "🆕 Baru Gym" if profil.get('mode') == 'noob' else "💪 Pro Gym"
     
     teks = (
         f"📊 *PROFIL GYM LU*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Mode: *{mode_label}*\n\n"
-        f"👤 Umur: *{profil['umur'] or 'N/A'}* tahun\n"
-        f"⚖️ Berat: *{profil['berat'] or 'N/A'}* kg\n"
-        f"📏 Tinggi: *{profil['tinggi'] or 'N/A'}* cm\n"
+        f"👤 Umur: *{profil.get('umur') or 'N/A'}* tahun\n"
+        f"⚖️ Berat: *{profil.get('berat') or 'N/A'}* kg\n"
+        f"📏 Tinggi: *{profil.get('tinggi') or 'N/A'}* cm\n"
         f"📈 BMI: *{bmi or 'N/A'}* ({kategori})\n"
     )
     
-    if profil['mode'] == 'pro':
+    if profil.get('mode') == 'pro':
         teks += (
-            f"\n🎯 Target: *{profil['target'] or 'N/A'}*\n"
-            f"🎓 Level: *{profil['level'] or 'N/A'}*\n"
-            f"⏳ Pengalaman: *{profil['pengalaman'] or 'N/A'}* tahun\n"
-            f"📅 Frekuensi: *{profil['frekuensi'] or 'N/A'}*x/minggu\n"
-            f"🏋️ Alat: *{profil['alat'] or 'N/A'}*\n"
+            f"\n🎯 Target: *{profil.get('target') or 'N/A'}*\n"
+            f"🎓 Level: *{profil.get('level') or 'N/A'}*\n"
+            f"⏳ Pengalaman: *{profil.get('pengalaman') or 'N/A'}* tahun\n"
+            f"📅 Frekuensi: *{profil.get('frekuensi') or 'N/A'}*x/minggu\n"
+            f"🏋️ Alat: *{profil.get('alat') or 'N/A'}*\n"
         )
         
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("🔄 Daftar Ulang", callback_data=f"gym_{profil['mode']}_start"),
+        types.InlineKeyboardButton("🔄 Daftar Ulang", callback_data=f"gym_{profil.get('mode')}_start"),
         types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info")
     )
     markup.add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
@@ -107,27 +114,28 @@ def handler_gym(pesan):
             
         conn = get_db()
         c = conn.cursor()
-        c.execute("INSERT INTO gym_logs (user_id, log_teks) VALUES (?, ?)", (user_id, teks_perintah))
+        # FIX: PostgreSQL pakai %s
+        c.execute("INSERT INTO gym_logs (user_id, log_teks) VALUES (%s, %s)", (user_id, teks_perintah))
         conn.commit()
         conn.close()
         
         bot.send_chat_action(pesan.chat.id, 'typing')
         pesan_tunggu = bot.reply_to(pesan, "⏳ _PT AI lu lagi evaluasi..._", parse_mode="Markdown")
         
-        mode = profil['mode']
+        mode = profil.get('mode')
         if mode == 'noob':
             system_prompt = (
                 f"Kamu adalah asisten gym ramah untuk pemula. "
-                f"Klien: umur {profil['umur']}th, BB {profil['berat']}kg, TB {profil['tinggi']}cm. "
+                f"Klien: umur {profil.get('umur')}th, BB {profil.get('berat')}kg, TB {profil.get('tinggi')}cm. "
                 f"Evaluasi laporan latihan/makan dia dengan bahasa sederhana & motivasi. "
                 f"JANGAN pakai markdown (** atau * atau `). Tulis teks polos aja."
             )
         else:
             system_prompt = (
                 f"Kamu adalah personal trainer elite untuk klien berpengalaman. "
-                f"Klien: umur {profil['umur']}th, BB {profil['berat']}kg, TB {profil['tinggi']}cm, "
-                f"target {profil['target']}, level {profil['level']}, "
-                f"frekuensi {profil['frekuensi']}x/minggu, alat {profil['alat']}. "
+                f"Klien: umur {profil.get('umur')}th, BB {profil.get('berat')}kg, TB {profil.get('tinggi')}cm, "
+                f"target {profil.get('target')}, level {profil.get('level')}, "
+                f"frekuensi {profil.get('frekuensi')}x/minggu, alat {profil.get('alat')}. "
                 f"Evaluasi laporan dia dengan detail teknis. "
                 f"JANGAN pakai markdown (** atau * atau `). Tulis teks polos aja."
             )
@@ -171,7 +179,7 @@ def handler_gym(pesan):
 def proses_gym_wizard(pesan, wizard):
     user_id = pesan.from_user.id
     teks = pesan.text.strip()
-    mode = wizard['mode']
+    mode = wizard.get('mode')
     
     if mode == 'pro':
         parts = [p.strip().lower() for p in teks.split('|')]
@@ -201,10 +209,11 @@ def proses_gym_wizard(pesan, wizard):
             bot.reply_to(pesan, "❌ Gagal ambil data profil.")
             return
             
-        bot.reply_to(pesan, f"✅ Data program Pro disimpan!\n\n⏳ _AI lagi nyiapin analisis advanced..._", parse_mode='Markdown')
+        # FIX: Hapus parse_mode Markdown biar gak error
+        bot.reply_to(pesan, "✅ Data program Pro disimpan!\n\n⏳ AI lagi nyiapin analisis advanced...")
         bot.send_chat_action(pesan.chat.id, 'typing')
         
-        data_pro.update({'umur': profil['umur'], 'berat': profil['berat'], 'tinggi': profil['tinggi'], 'jenis_kelamin': profil['jenis_kelamin']})
+        data_pro.update({'umur': profil.get('umur'), 'berat': profil.get('berat'), 'tinggi': profil.get('tinggi'), 'jenis_kelamin': profil.get('jenis_kelamin')})
         hasil = analisis_gym_pro(data_pro)
         
         if hasil:
@@ -243,7 +252,7 @@ def callback_gym_noob_start(call):
         bot.edit_message_text("⏳ _AI lagi nyiapin panduan buat lu..._", call.message.chat.id, call.message.message_id)
         bot.send_chat_action(call.message.chat.id, 'typing')
         
-        hasil = analisis_gym_noob(profil['umur'], profil['berat'], profil['tinggi'])
+        hasil = analisis_gym_noob(profil.get('umur'), profil.get('berat'), profil.get('tinggi'))
         
         if hasil:
             try: bot.send_message(call.message.chat.id, hasil, parse_mode='Markdown')
