@@ -39,13 +39,36 @@ def setup_db():
     # --- TAMBAHAN BARU: Tabel untuk State Wizard (Onboarding & Gym) ---
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS wizard_states (
-            user_id TEXT PRIMARY KEY,
+            user_id TEXT,
             state_type TEXT,
             step TEXT,
             data TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, state_type) -- <--- FIX: Composite Primary Key
         )
     ''')
+
+    # --- MIGRASI OTOMATIS: Cek kalau tabel lama masih pakai single primary key ---
+    cursor.execute("PRAGMA table_info(wizard_states)")
+    cols = cursor.fetchall()
+    pk_count = sum(1 for col in cols if col[5] > 0) # col[5] adalah urutan PK
+    
+    if pk_count == 1:
+        logger.info("🔄 Migrasi tabel wizard_states ke composite primary key...")
+        cursor.execute("ALTER TABLE wizard_states RENAME TO wizard_states_old")
+        cursor.execute('''
+            CREATE TABLE wizard_states (
+                user_id TEXT,
+                state_type TEXT,
+                step TEXT,
+                data TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, state_type)
+            )
+        ''')
+        cursor.execute("INSERT INTO wizard_states (user_id, state_type, step, data, updated_at) SELECT user_id, state_type, step, data, updated_at FROM wizard_states_old")
+        cursor.execute("DROP TABLE wizard_states_old")
+        logger.info("✅ Migrasi wizard_states selesai!")
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS food_logs (
@@ -68,11 +91,15 @@ def setup_db():
         )
     ''')
 
+    # Index biasa
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_id ON histori_chat(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_user ON chat_messages(user_id, id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_food_user ON food_logs(user_id, tanggal)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_water_user ON water_logs(user_id, tanggal)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_weight_user ON weight_logs(user_id, tanggal)")
+    
+    # --- TAMBAHAN STEP 2: Anti Duplikat Foto (Unique Index) ---
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_food_user_photohash ON food_logs(user_id, photo_hash) WHERE photo_hash IS NOT NULL")
 
     conn.commit()
     conn.close()

@@ -3,17 +3,15 @@ from bot_instance import bot
 from telebot import types
 from services.ai import analisis_alat_gym
 from utils.decorators import rate_limited
+from database.queries import save_wizard_state, delete_wizard_state
 
 logger = logging.getLogger(__name__)
-
-# State penanda kalau user lagi mau kirim foto alat gym
-_waiting_equipment_photo = set()
 
 @bot.callback_query_handler(func=lambda call: call.data == "menu_scan_alat")
 def callback_scan_alat(call):
     try:
         bot.answer_callback_query(call.id)
-        _waiting_equipment_photo.add(str(call.from_user.id))
+        save_wizard_state(str(call.from_user.id), "waiting_equipment_photo", "waiting", {})
         
         teks = (
             "🔍 *SCAN ALAT GYM*\n"
@@ -28,7 +26,7 @@ def callback_scan_alat(call):
 
 def proses_foto_alat(pesan):
     user_id = str(pesan.from_user.id)
-    _waiting_equipment_photo.discard(user_id)
+    delete_wizard_state(user_id, "waiting_equipment_photo")
     
     bot.send_chat_action(pesan.chat.id, 'typing')
     pesan_tunggu = bot.reply_to(pesan, "⏳ _AI lagi ngenalin alat gym lu..._")
@@ -44,7 +42,6 @@ def proses_foto_alat(pesan):
             try:
                 bot.edit_message_text(hasil, pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown', reply_markup=markup)
             except Exception:
-                # Fallback kalau format teks dari AI bikin error Markdown
                 bot.edit_message_text(hasil, pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
         else:
             bot.edit_message_text("❌ AI gagal ngenalin alatnya. Coba foto dari sudut yang lebih jelas.", pesan.chat.id, pesan_tunggu.message_id)

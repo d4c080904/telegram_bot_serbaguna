@@ -1,14 +1,14 @@
 import logging
 from bot_instance import bot
-from database.queries import simpan_ke_db, update_food_log, cek_id_makanan, is_chat_mode
+from database.queries import simpan_ke_db, update_food_log, cek_id_makanan, is_chat_mode, get_wizard_state
 from services.ai import koreksi_foto_makanan
 from utils.helpers import strip_markdown
 from utils.decorators import rate_limited
 from utils.state import get_gym_wizard, get_onboarding_wizard
 from handlers.gym import proses_gym_wizard
 from handlers.start import proses_onboarding
-from handlers.calorie import _waiting_food_photo, proses_foto_makanan, tampil_dashboard_kalori
-from handlers.equipment import _waiting_equipment_photo, proses_foto_alat
+from handlers.calorie import proses_foto_makanan, tampil_dashboard_kalori
+from handlers.equipment import proses_foto_alat
 from handlers.pt_chat import proses_chat_pt
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ def respon_pesan(pesan):
             proses_gym_wizard(pesan, wizard)
             return
 
-        # --- TAMBAHAN BARU: CEK MODE CHAT PT AI ---
+        # --- CEK MODE CHAT PT AI ---
         if is_chat_mode(user_id) and not teks_asli.startswith('/'):
             proses_chat_pt(pesan)
             return
@@ -68,7 +68,7 @@ def respon_pesan(pesan):
                     bot.reply_to(pesan, "⚠️ *Pesan yang lu reply itu Dashboard, bukan detail makanannya.*\n\nBiar bisa dikoreksi, tolong reply pesan *Foto Makanan* atau *✅ Berhasil Dicatat!* ya.", parse_mode='Markdown')
                     return
 
-        # 4. JIKA USER KIRIM TEKS SEMBARANG (Bukan command, bukan reply, bukan wizard)
+        # 4. JIKA USER KIRIM TEKS SEMBARANG
         if teks_asli.startswith('/'):
             return
             
@@ -90,9 +90,9 @@ def respon_pesan(pesan):
 def handle_photo(pesan):
     user_id = str(pesan.from_user.id)
     
-    if user_id in _waiting_food_photo:
+    if get_wizard_state(user_id, "waiting_food_photo"):
         proses_foto_makanan(pesan)
-    elif user_id in _waiting_equipment_photo:
+    elif get_wizard_state(user_id, "waiting_equipment_photo"):
         proses_foto_alat(pesan)
     else:
         bot.reply_to(pesan, "📸 Foto diterima. Kalau mau scan kalori, masuk ke menu 🍎 *Kalori & Gula*. Kalau mau scan alat gym, masuk ke *🔍 Scan Alat Gym*.", parse_mode='Markdown')

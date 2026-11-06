@@ -2,21 +2,18 @@ from bot_instance import bot
 from telebot import types
 from database.queries import (
     get_gym_profile, get_total_makro_hari_ini, get_history_makanan_hari_ini, 
-    hapus_log_terakhir, cek_duplikat_foto, tambah_food_log
+    hapus_log_terakhir, save_wizard_state, delete_wizard_state
 )
 from utils.helpers import hitung_bmr_tdee
-from utils.decorators import rate_limited
+from services.meal_tracker import proses_foto_makanan_core
 import logging
 import datetime
-import hashlib
 
 logger = logging.getLogger(__name__)
 
 HARI_INDONESIA = {'Monday': 'Senin', 'Tuesday': 'Selasa', 'Wednesday': 'Rabu', 'Thursday': 'Kamis', 'Friday': 'Jumat', 'Saturday': 'Sabtu', 'Sunday': 'Minggu'}
 BULAN_INDONESIA = {'January': 'Januari', 'February': 'Februari', 'March': 'Maret', 'April': 'April', 'May': 'Mei', 'June': 'Juni', 'July': 'Juli', 'August': 'Agustus', 'September': 'September', 'October': 'Oktober', 'November': 'November', 'December': 'Desember'}
 WIB_TZ = datetime.timezone(datetime.timedelta(hours=7))
-
-_waiting_food_photo = set()
 
 def tampil_dashboard_kalori(chat_id, user_id, message_id=None):
     profil = get_gym_profile(user_id)
@@ -65,7 +62,7 @@ def tampil_dashboard_kalori(chat_id, user_id, message_id=None):
     btn_foto = types.InlineKeyboardButton("📸 Foto Makanan", callback_data="kalori_foto")
     btn_hapus = types.InlineKeyboardButton("📝 Hapus Log Terakhir", callback_data="kalori_hapus")
     btn_history = types.InlineKeyboardButton("📊 Lihat History", callback_data="kalori_history")
-    btn_kembali = types.InlineKeyboardButton("🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode") # <--- DIUBAH
+    btn_kembali = types.InlineKeyboardButton("🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode")
     
     markup.add(btn_foto)
     markup.add(btn_hapus, btn_history)
@@ -89,7 +86,8 @@ def callback_menu_kalori(call):
 def callback_kalori_foto(call):
     try:
         bot.answer_callback_query(call.id)
-        _waiting_food_photo.add(str(call.from_user.id))
+        save_wizard_state(str(call.from_user.id), "waiting_food_photo", "waiting", {})
+        
         teks = "📸 *Silakan kirim foto makanan lu sekarang.*\n\n_(Boleh tambahkan caption nama makanannya biar AI makin akurat)_"
         markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("❌ Batal", callback_data="menu_kalori"))
         try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=markup)
@@ -138,7 +136,7 @@ def callback_kalori_history(call):
 
 def proses_foto_makanan(pesan):
     user_id = str(pesan.from_user.id)
-    _waiting_food_photo.discard(user_id)
+    delete_wizard_state(user_id, "waiting_food_photo")
     
     bot.send_chat_action(pesan.chat.id, 'typing')
     pesan_tunggu = bot.reply_to(pesan, "⏳ _AI Ahli Gizi lagi menganalisis makanan & gulanya..._")
@@ -148,33 +146,37 @@ def proses_foto_makanan(pesan):
         downloaded_file = bot.download_file(file_info.file_path)
         caption = pesan.caption or ""
         
-        photo_hash = hashlib.md5(downloaded_file).hexdigest()
+        # Panggil Logic Bisnis (Service)
+        result = proses_foto_makanan_core(
+            user_id=user_id,
+            image_bytes=downloaded_file,
+            caption=caption,
+            message_id=pesan_tunggu.message_id,
+            photo_message_id=pesan.message_id
+        )
         
-        if cek_duplikat_foto(user_id, photo_hash):
+        # Handle Hasil Response Service
+        if result["status"] == "duplicate":
             bot.edit_message_text(
                 "⚠️ *Foto Duplikat Terdeteksi!*\n\nFoto ini persis kayak yang udah lu kirim dan catat hari ini. Biar kalori lu nggak dobel, gw abaikan ya bro. 👍",
                 pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown'
             )
             return
             
-        from services.ai import analisis_foto_makanan
-        hasil = analisis_foto_makanan(downloaded_file, caption)
-        
-        if not hasil:
+        if result["status"] == "ai_failed":
             bot.edit_message_text("❌ AI gagal menganalisis foto. Coba kirim ulang dengan foto yang lebih jelas.", pesan.chat.id, pesan_tunggu.message_id)
             return
             
-        berhasil = tambah_food_log(
-            user_id, pesan_tunggu.message_id, pesan.message_id, photo_hash, 
-            hasil.get('nama_makanan', 'Makanan'), hasil.get('estimasi_porsi', '1 porsi'), 
-            hasil.get('kalori', 0), hasil.get('protein', 0), hasil.get('karbo', 0), 
-            hasil.get('lemak', 0), hasil.get('gula', 0)
-        )
-        
-        if not berhasil:
+        if result["status"] == "db_failed":
             bot.edit_message_text("❌ Gagal menyimpan data ke database.", pesan.chat.id, pesan_tunggu.message_id)
             return
             
+        if result["status"] == "error":
+            bot.edit_message_text("❌ Terjadi kesalahan sistem saat memproses foto.", pesan.chat.id, pesan_tunggu.message_id)
+            return
+            
+        # JIKA SUKSES
+        hasil = result["data"]
         teks_balasan = (
             f"✅ *Berhasil Dicatat!*\n\n"
             f"🍽️ Nama: *{hasil.get('nama_makanan')}*\n"

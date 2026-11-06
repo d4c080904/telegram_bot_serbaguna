@@ -2,7 +2,8 @@ import hashlib
 import logging
 import datetime
 import re
-import json  # <--- TAMBAHAN BARU
+import json
+import sqlite3  # <-- Pindah ke atas
 from database.db import get_db
 from config import CHAT_HISTORY_LIMIT, CHAT_MAX_MESSAGES
 
@@ -147,9 +148,19 @@ def tambah_food_log(user_id, message_id, photo_message_id, photo_hash, nama, por
         gul = float(parse_number(gula))
         if isinstance(nama, list): nama = ", ".join(map(str, nama))
         else: nama = str(nama)
+        
         c.execute('''INSERT INTO food_logs (user_id, message_id, photo_message_id, photo_hash, tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (str(user_id), message_id, photo_message_id, photo_hash, tanggal_ini, nama, porsi, kal, pro, kar, lem, gul))
         conn.commit(); conn.close(); return True
-    except Exception as e: logger.error(f"tambah_food_log error: {e}"); return False
+        
+    except sqlite3.IntegrityError:
+        # TANGKAP ERROR DARI UNIQUE INDEX
+        logger.warning(f"⚠️ Duplikat dicegah DB: user {user_id}, hash {photo_hash}")
+        if 'conn' in locals(): conn.close()
+        return False
+    except Exception as e: 
+        logger.error(f"tambah_food_log error: {e}")
+        if 'conn' in locals(): conn.close()
+        return False
 
 def cek_id_makanan(user_id, reply_msg_id):
     try:
