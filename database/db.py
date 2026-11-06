@@ -36,6 +36,17 @@ def setup_db():
     cursor.execute('''CREATE TABLE IF NOT EXISTS chat_sessions (user_id TEXT PRIMARY KEY, is_active INTEGER DEFAULT 0, last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, role TEXT, content TEXT, waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     
+    # --- TAMBAHAN BARU: Tabel untuk State Wizard (Onboarding & Gym) ---
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS wizard_states (
+            user_id TEXT PRIMARY KEY,
+            state_type TEXT,
+            step TEXT,
+            data TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS food_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, message_id INTEGER,

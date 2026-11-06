@@ -1,20 +1,28 @@
-_gym_wizard = {}
-_onboarding_wizard = {}
+from database.queries import save_wizard_state, get_wizard_state, delete_wizard_state
 
+# --- GYM WIZARD ---
 def set_gym_wizard(user_id, mode, step, data=None):
-    _gym_wizard[str(user_id)] = {'mode': mode, 'step': step, 'data': data or {}}
+    state_data = {'mode': mode, 'data': data or {}}
+    save_wizard_state(user_id, 'gym', step, state_data)
 
 def get_gym_wizard(user_id):
-    return _gym_wizard.get(str(user_id))
+    state = get_wizard_state(user_id, 'gym')
+    if state:
+        return {'mode': state['data'].get('mode'), 'step': state['step'], 'data': state['data'].get('data', {})}
+    return None
 
 def clear_gym_wizard(user_id):
-    _gym_wizard.pop(str(user_id), None)
+    delete_wizard_state(user_id, 'gym')
 
+# --- ONBOARDING WIZARD ---
 def set_onboarding_wizard(user_id, step, data=None):
-    _onboarding_wizard[str(user_id)] = {'step': step, 'data': data or {}}
+    save_wizard_state(user_id, 'onboarding', step, data or {})
 
 def get_onboarding_wizard(user_id):
-    return _onboarding_wizard.get(str(user_id))
+    state = get_wizard_state(user_id, 'onboarding')
+    if state:
+        return {'step': state['step'], 'data': state['data']}
+    return None
 
 def clear_onboarding_wizard(user_id):
-    _onboarding_wizard.pop(str(user_id), None)
+    delete_wizard_state(user_id, 'onboarding')

@@ -1,12 +1,11 @@
 from bot_instance import bot
 from keyboards.menus import (
     buat_menu_utama, teks_menu_utama, 
-    buat_menu_gym_mode, teks_menu_gym_mode, 
     tombol_kembali, buat_tombol_gender
 )
 from utils.decorators import rate_limited
 from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard
-from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir
+from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode
 from database.db import get_db
 import logging
 
@@ -16,16 +15,17 @@ def buat_ringkasan_dashboard(user_id):
     air = get_total_air_hari_ini(user_id)
     target_air = 2000
     persen = min((air / target_air) * 100, 100)
+    
     bar_length = 10
     filled = int(bar_length * persen / 100)
-    bar = "█" * filled + "░" * (bar_length - filled)
+    bar = "🟦" * filled + "⬜" * (bar_length - filled)
     
     berat_data = get_berat_terakhir(user_id)
     berat_str = f"{berat_data[0][0]} kg" if berat_data else "Belum diisi"
     
     return (
         "📊 *RINGKASAN HARI INI:*\n"
-        f"💧 Air: [{bar}] {int(persen)}% ({air}/{target_air} ml)\n"
+        f"💧 Air: {bar} {int(persen)}% ({air}/{target_air} ml)\n"
         f"⚖️ Berat: {berat_str}\n"
     )
 
@@ -34,6 +34,8 @@ def buat_ringkasan_dashboard(user_id):
 def kirim_sambutan(pesan):
     try:
         user_id = str(pesan.from_user.id)
+        set_chat_mode(user_id, False) # Matiin mode Chat PT kalau user ngetik /start
+        
         user = get_user_profile(user_id)
         
         if not user:
@@ -119,6 +121,8 @@ def callback_menu_utama(call):
     try:
         bot.answer_callback_query(call.id)
         user_id = str(call.from_user.id)
+        set_chat_mode(user_id, False) # Matiin mode Chat PT kalau user pencet Menu Utama
+        
         user = get_user_profile(user_id)
         nama = user['nama'] if user else "Bro"
         
@@ -132,46 +136,32 @@ def callback_menu_utama(call):
     except Exception as e:
         logger.error(f"[menu_utama] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "menu_gym_mode")
-def callback_menu_gym_mode(call):
-    try:
-        bot.answer_callback_query(call.id)
-        try: 
-            bot.edit_message_text(teks_menu_gym_mode(), call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=buat_menu_gym_mode())
-        except Exception: 
-            bot.send_message(call.message.chat.id, teks_menu_gym_mode(), parse_mode='Markdown', reply_markup=buat_menu_gym_mode())
-    except Exception as e:
-        logger.error(f"[menu_gym_mode] error: {e}")
-
-# --- INI DIA HANDLER YANG TADI KEHAPUS ---
-@bot.callback_query_handler(func=lambda call: call.data == "menu_rapih")
-def callback_menu_rapih(call):
-    try:
-        bot.answer_callback_query(call.id)
-        teks = (
-            "📝 *MODE PERAPIH TEKS*\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Kirim teks berantakan / bahasa gaul, nanti gw ubah jadi bahasa Indonesia baku.\n\n"
-            "*Contoh:*\n`gw lg males bgt nih mau ngerjain tugas`\n→ _Saya sedang sangat malas mengerjakan tugas._\n\n"
-            "Gass kirim teksnya! 👇"
-        )
-        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=tombol_kembali())
-        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=tombol_kembali())
-    except Exception as e: logger.error(f"[menu_rapih] error: {e}")
-
 @bot.callback_query_handler(func=lambda call: call.data == "menu_stats")
 def callback_menu_stats(call):
     try:
         user_id = call.from_user.id
         conn = get_db(); c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM histori_chat WHERE user_id = ?", (str(user_id),))
-        jumlah = c.fetchone()[0]
-        c.execute("SELECT COUNT(*) FROM chat_messages WHERE user_id = ?", (str(user_id),))
-        jumlah_chat = c.fetchone()[0]
+        
+        c.execute("SELECT COUNT(*) FROM food_logs WHERE user_id = ?", (str(user_id),))
+        jumlah_makan = c.fetchone()[0]
+        
+        c.execute("SELECT COUNT(*) FROM water_logs WHERE user_id = ?", (str(user_id),))
+        jumlah_air = c.fetchone()[0]
+        
+        c.execute("SELECT COUNT(*) FROM gym_logs WHERE user_id = ?", (str(user_id),))
+        jumlah_gym = c.fetchone()[0]
+        
         conn.close()
 
         bot.answer_callback_query(call.id)
-        teks = f"📊 *STATISTIK LU*\n━━━━━━━━━━━━━━━━━━━━\n\n🔧 Pakai fitur: *{jumlah} kali*\n💬 Pesan chat AI: *{jumlah_chat} pesan*\n\n_Terus pakai bot ini biar angkanya naik!_ 🚀"
+        teks = (
+            "📊 *STATISTIK GYM LU*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🍎 Log Makanan: *{jumlah_makan} kali*\n"
+            f"💧 Log Air Minum: *{jumlah_air} kali*\n"
+            f"💪 Log Latihan: *{jumlah_gym} kali*\n\n"
+            "_Terus pakai bot ini biar badan makin gede!_ 🚀"
+        )
         try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=tombol_kembali())
         except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=tombol_kembali())
     except Exception as e: logger.error(f"[menu_stats] error: {e}")
@@ -181,13 +171,19 @@ def callback_menu_help(call):
     try:
         bot.answer_callback_query(call.id)
         teks = (
-            "❓ *BANTUAN & PANDUAN*\n"
+            "❓ *BANTUAN & PANDUAN GYMBOT*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "*📝 Perapih Teks*\n→ Kirim teks berantakan, dirapihin otomatis\n\n"
-            "*💬 AI Chat*\n→ Ketik `/chat` atau pencet tombol di menu\n→ `/reset` hapus history\n→ `/exit` keluar dari chat\n\n"
-            "*🏋️‍♂️ GYM MODE*\n→ Fitur lengkap Kalori, Air, Meal Planner, dll.\n\n"
-            "*📥 Downloader*\n→ Paste link TikTok/IG/YouTube\n\n"
-            "*⚙️ Command lain:*\n`/start` — menu utama\n`/menu` — buka menu lagi"
+            "*🍎 Kalori & Gula*\n→ Foto makanan buat hitung kalori otomatis.\n→ Bisa reply pesan hasil foto buat koreksi porsi.\n\n"
+            "*💧 Progress & Air*\n→ Catat minum air & berat badan harian.\n\n"
+            "*💪 Program Gym*\n→ Bikin program latihan (Noob/Pro).\n→ Catat log latihan harian.\n\n"
+            "*💬 Chat PT AI*\n→ Tanya jawab seputar gym & nutrisi layaknya punya PT pribadi.\n\n"
+            "*🔍 Scan Alat*\n→ Foto alat gym buat tau cara pakenya.\n\n"
+            "*🍳 Meal Planner*\n→ Rekomendasi resep sesuai sisa kalori lu.\n\n"
+            "*🎙️ Voice Note (Pesan Suara)*\n→ Kirim VN buat nyatet makanan atau latihan otomatis!\n\n"
+            "*⚙️ Command Lain:*\n"
+            "`/start` — Buka menu utama\n"
+            "`/gym` — Langsung ke menu program gym\n"
+            "`/cancel` — Batalin input yang lagi jalan"
         )
         try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=tombol_kembali())
         except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=tombol_kembali())

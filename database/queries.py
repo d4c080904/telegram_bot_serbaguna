@@ -2,6 +2,7 @@ import hashlib
 import logging
 import datetime
 import re
+import json  # <--- TAMBAHAN BARU
 from database.db import get_db
 from config import CHAT_HISTORY_LIMIT, CHAT_MAX_MESSAGES
 
@@ -232,3 +233,29 @@ def get_all_data_for_export(user_id):
         conn.close()
         return food_data, water_data, weight_data
     except Exception as e: logger.error(f"get_all_data_for_export error: {e}"); return [], [], []
+
+# --- FUNGSI STATE WIZARD (TAMBAHAN BARU) ---
+def save_wizard_state(user_id, state_type, step, data):
+    try:
+        conn = get_db(); c = conn.cursor()
+        data_json = json.dumps(data)
+        c.execute('''INSERT OR REPLACE INTO wizard_states (user_id, state_type, step, data, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)''', (str(user_id), state_type, step, data_json))
+        conn.commit(); conn.close(); return True
+    except Exception as e: logger.error(f"save_wizard_state error: {e}"); return False
+
+def get_wizard_state(user_id, state_type):
+    try:
+        conn = get_db(); c = conn.cursor()
+        c.execute("SELECT step, data FROM wizard_states WHERE user_id = ? AND state_type = ?", (str(user_id), state_type))
+        row = c.fetchone(); conn.close()
+        if row:
+            return {'step': row[0], 'data': json.loads(row[1])}
+        return None
+    except Exception as e: logger.error(f"get_wizard_state error: {e}"); return None
+
+def delete_wizard_state(user_id, state_type):
+    try:
+        conn = get_db(); c = conn.cursor()
+        c.execute("DELETE FROM wizard_states WHERE user_id = ? AND state_type = ?", (str(user_id), state_type))
+        conn.commit(); conn.close(); return True
+    except Exception as e: logger.error(f"delete_wizard_state error: {e}"); return False
