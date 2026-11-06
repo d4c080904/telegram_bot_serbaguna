@@ -36,3 +36,6 @@ BROWSER_HEADERS = {
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
+import os
+
+DATABASE_URL = os.getenv("DATABASE_URL")

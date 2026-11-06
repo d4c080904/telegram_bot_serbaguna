@@ -1,15 +1,16 @@
+version: '3.8'
 services:
-  bot:
-    build: .
-    container_name: bot-serbaguna
-    restart: unless-stopped
-    env_file:
-      - .env
+  db:
+    image: postgres:15-alpine
+    container_name: gymmate_db
+    environment:
+      POSTGRES_USER: gymmate
+      POSTGRES_PASSWORD: rahasia_gymmate
+      POSTGRES_DB: gymmate_db
+    ports:
+      - "5432:5432"
     volumes:
-      - ./bot_history.db:/app/bot_history.db
-      - ./bot.log:/app/bot.log
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

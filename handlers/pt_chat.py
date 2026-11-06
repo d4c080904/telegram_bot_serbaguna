@@ -1,6 +1,6 @@
 from bot_instance import bot
-from database.queries import set_chat_mode, hapus_chat_history, simpan_chat_message, is_chat_mode
-from services.ai import chat_dengan_pt
+from database.queries import set_chat_mode, hapus_chat_history
+from services.pt_chat import proses_chat_pt_core
 from utils.helpers import strip_markdown
 from telebot import types
 import logging
@@ -61,14 +61,14 @@ def callback_pt_reset(call):
     except Exception as e: logger.error(f"[pt_reset] error: {e}")
 
 def proses_chat_pt(pesan):
-    user_id = pesan.from_user.id
+    user_id = str(pesan.from_user.id)
     teks = pesan.text.strip()
     
     bot.send_chat_action(pesan.chat.id, 'typing')
     pesan_tunggu = bot.reply_to(pesan, "💭 _PT AI lagi mikir..._", parse_mode="Markdown")
     
-    simpan_chat_message(user_id, "user", teks)
-    balasan = chat_dengan_pt(user_id, teks)
+    # Panggil Logic Bisnis (Service)
+    result = proses_chat_pt_core(user_id=user_id, teks=teks)
     
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -76,12 +76,22 @@ def proses_chat_pt(pesan):
         types.InlineKeyboardButton("🏠 Menu", callback_data="menu_utama")
     )
     
-    if balasan:
-        simpan_chat_message(user_id, "assistant", balasan)
-        if len(balasan) > 4000: balasan = balasan[:4000] + "\n\n[...dipotong]"
-        try: bot.edit_message_text(balasan, pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown', reply_markup=markup)
-        except Exception:
-            try: bot.edit_message_text(strip_markdown(balasan), pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
-            except Exception: bot.reply_to(pesan, strip_markdown(balasan)[:4000], reply_markup=markup)
-    else:
+    # Handle Hasil Response Service
+    if result["status"] == "ai_failed":
         bot.edit_message_text("❌ PT AI-nya lagi error nih bro. Coba lagi bentar ya.", pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
+        return
+        
+    if result["status"] == "error":
+        bot.edit_message_text("❌ Terjadi kesalahan sistem. Coba lagi ya.", pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
+        return
+        
+    # JIKA SUKSES
+    balasan = result["data"]
+    try:
+        bot.edit_message_text(balasan, pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown', reply_markup=markup)
+    except Exception:
+        # Fallback kalau Markdown bikin error
+        try:
+            bot.edit_message_text(strip_markdown(balasan), pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
+        except Exception:
+            bot.reply_to(pesan, strip_markdown(balasan)[:4000], reply_markup=markup)

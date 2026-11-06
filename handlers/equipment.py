@@ -1,7 +1,7 @@
 import logging
 from bot_instance import bot
 from telebot import types
-from services.ai import analisis_alat_gym
+from services.equipment import proses_foto_alat_core
 from utils.decorators import rate_limited
 from database.queries import save_wizard_state, delete_wizard_state
 
@@ -35,16 +35,28 @@ def proses_foto_alat(pesan):
         file_info = bot.get_file(pesan.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         
-        hasil = analisis_alat_gym(downloaded_file)
+        # Panggil Logic Bisnis (Service)
+        result = proses_foto_alat_core(image_bytes=downloaded_file)
         
-        if hasil:
-            markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode"))
-            try:
-                bot.edit_message_text(hasil, pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown', reply_markup=markup)
-            except Exception:
-                bot.edit_message_text(hasil, pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
-        else:
+        # Handle Hasil Response Service
+        if result["status"] == "ai_failed":
             bot.edit_message_text("❌ AI gagal ngenalin alatnya. Coba foto dari sudut yang lebih jelas.", pesan.chat.id, pesan_tunggu.message_id)
+            return
+            
+        if result["status"] == "error":
+            bot.edit_message_text("❌ Terjadi kesalahan sistem saat memproses foto.", pesan.chat.id, pesan_tunggu.message_id)
+            return
+            
+        # JIKA SUKSES
+        hasil = result["data"]
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode"))
+        
+        try:
+            bot.edit_message_text(hasil, pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown', reply_markup=markup)
+        except Exception:
+            # Fallback kalau format teks dari AI bikin error Markdown
+            bot.edit_message_text(hasil, pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
+            
     except Exception as e:
         logger.error(f"proses_foto_alat error: {e}")
         bot.edit_message_text("❌ Terjadi kesalahan saat memproses foto.", pesan.chat.id, pesan_tunggu.message_id)
