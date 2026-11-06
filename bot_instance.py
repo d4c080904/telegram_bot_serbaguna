@@ -1,11 +1,18 @@
-import telebot
-from telebot import apihelper
+import logging
+from aiogram import Bot, Dispatcher
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from groq import Groq
 from config import TELEGRAM_TOKEN, GROQ_API_KEY
 
-apihelper.SESSION_TIME_TO_LIVE = 5 * 60
+logger = logging.getLogger(__name__)
 
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
+# --- INIT BOT AIOGRAM ---
+bot = Bot(
+    token=TELEGRAM_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+dp = Dispatcher()
 
-# Inisialisasi Groq Client
+# --- INIT GROQ CLIENT ---
 groq_client = Groq(api_key=GROQ_API_KEY)

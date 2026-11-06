@@ -1,18 +1,22 @@
-from bot_instance import bot
+import logging
+from aiogram import Router, F, types
+from aiogram.filters import Command
+from aiogram.types import Message, CallbackQuery
+
 from keyboards.menus import (
     buat_menu_utama, teks_menu_utama, 
     tombol_kembali, buat_tombol_gender
 )
-from utils.decorators import rate_limited
+# from utils.decorators import rate_limited # (Sementara dimatikan dulu, nanti kita benerin decoratornya)
 from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard
 from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode
 from database.db import get_db
-import logging
 
 logger = logging.getLogger(__name__)
+router = Router()
 
-def buat_ringkasan_dashboard(user_id):
-    air = get_total_air_hari_ini(user_id)
+async def buat_ringkasan_dashboard(user_id):
+    air = await get_total_air_hari_ini(user_id)
     target_air = 2000
     persen = min((air / target_air) * 100, 100)
     
@@ -20,8 +24,8 @@ def buat_ringkasan_dashboard(user_id):
     filled = int(bar_length * persen / 100)
     bar = "🟦" * filled + "⬜" * (bar_length - filled)
     
-    berat_data = get_berat_terakhir(user_id)
-    berat_str = f"{berat_data[0][0]} kg" if berat_data else "Belum diisi"
+    berat_data = await get_berat_terakhir(user_id)
+    berat_str = f"{berat_data[0]['berat']} kg" if berat_data else "Belum diisi"
     
     return (
         "📊 *RINGKASAN HARI INI:*\n"
@@ -29,131 +33,121 @@ def buat_ringkasan_dashboard(user_id):
         f"⚖️ Berat: {berat_str}\n"
     )
 
-@bot.message_handler(commands=['start', 'help', 'menu'])
-@rate_limited
-def kirim_sambutan(pesan):
+@router.message(Command("start", "help", "menu"))
+async def kirim_sambutan(message: Message):
     try:
-        user_id = str(pesan.from_user.id)
-        set_chat_mode(user_id, False) # Matiin mode Chat PT kalau user ngetik /start
+        user_id = str(message.from_user.id)
+        await set_chat_mode(user_id, False)
         
-        user = get_user_profile(user_id)
+        user = await get_user_profile(user_id)
         
         if not user:
-            set_onboarding_wizard(user_id, 'nama')
-            bot.reply_to(pesan, "Halo bro! 👋 Sebelum mulai, kenalin diri lu dulu ya.\n\nSiapa **nama panggilan** lu?", parse_mode='Markdown')
+            await set_onboarding_wizard(user_id, 'nama', {})
+            await message.answer("Halo bro! 👋 Sebelum mulai, kenalin diri lu dulu ya.\n\nSiapa **nama panggilan** lu?", parse_mode="Markdown")
             return
             
-        ringkasan = buat_ringkasan_dashboard(user_id)
+        ringkasan = await buat_ringkasan_dashboard(user_id)
         teks = f"Halo *{user['nama']}*! 👋\n\n" + teks_menu_utama(ringkasan)
-        bot.reply_to(pesan, teks, parse_mode='Markdown', reply_markup=buat_menu_utama())
+        await message.answer(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
     except Exception as e:
         logger.error(f"[start] error: {e}")
 
-def proses_onboarding(pesan):
-    user_id = str(pesan.from_user.id)
-    wizard = get_onboarding_wizard(user_id)
+async def proses_onboarding(message: Message, wizard: dict):
+    user_id = str(message.from_user.id)
     step = wizard['step']
     data = wizard['data']
-    teks = pesan.text.strip()
+    teks = message.text.strip()
     
     if step == 'nama':
         data['nama'] = teks
-        set_onboarding_wizard(user_id, 'umur', data)
-        bot.reply_to(pesan, f"Oke *{teks}*! Umur lu berapa tahun? (Ketik angka aja)")
+        await set_onboarding_wizard(user_id, 'umur', data)
+        await message.answer(f"Oke *{teks}*! Umur lu berapa tahun? (Ketik angka aja)", parse_mode="Markdown")
     elif step == 'umur':
         try:
             umur = int(teks)
             if umur < 10 or umur > 100:
-                bot.reply_to(pesan, "Umur harus antara 10-100 ya.")
+                await message.answer("Umur harus antara 10-100 ya.")
                 return
             data['umur'] = umur
-            set_onboarding_wizard(user_id, 'berat', data)
-            bot.reply_to(pesan, "Berat badan lu berapa kg? (Contoh: 65.5)")
+            await set_onboarding_wizard(user_id, 'berat', data)
+            await message.answer("Berat badan lu berapa kg? (Contoh: 65.5)")
         except ValueError:
-            bot.reply_to(pesan, "Tolong ketik angka aja ya.")
+            await message.answer("Tolong ketik angka aja ya.")
     elif step == 'berat':
         try:
             berat = float(teks.replace(',', '.'))
             data['berat'] = berat
-            set_onboarding_wizard(user_id, 'tinggi', data)
-            bot.reply_to(pesan, "Tinggi badan lu berapa cm? (Contoh: 170)")
+            await set_onboarding_wizard(user_id, 'tinggi', data)
+            await message.answer("Tinggi badan lu berapa cm? (Contoh: 170)")
         except ValueError:
-            bot.reply_to(pesan, "Tolong ketik angka aja ya.")
+            await message.answer("Tolong ketik angka aja ya.")
     elif step == 'tinggi':
         try:
             tinggi = float(teks.replace(',', '.'))
             data['tinggi'] = tinggi
-            set_onboarding_wizard(user_id, 'gender', data)
-            bot.reply_to(pesan, "Terakhir nih, jenis kelamin lu apa? Pencet tombol di bawah ya 👇", reply_markup=buat_tombol_gender())
+            await set_onboarding_wizard(user_id, 'gender', data)
+            await message.answer("Terakhir nih, jenis kelamin lu apa? Pencet tombol di bawah ya 👇", reply_markup=buat_tombol_gender())
         except ValueError:
-            bot.reply_to(pesan, "Tolong ketik angka aja ya.")
+            await message.answer("Tolong ketik angka aja ya.")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("onboard_gender_"))
-def callback_gender(call):
+@router.callback_query(F.data.startswith("onboard_gender_"))
+async def callback_gender(callback: CallbackQuery):
     try:
-        bot.answer_callback_query(call.id)
-        user_id = str(call.from_user.id)
-        wizard = get_onboarding_wizard(user_id)
+        await callback.answer()
+        user_id = str(callback.from_user.id)
+        wizard = await get_onboarding_wizard(user_id)
         
         if not wizard or wizard['step'] != 'gender':
-            bot.send_message(call.message.chat.id, "Sesi onboarding lu udah berakhir. Ketik /start lagi ya.")
+            await callback.message.answer("Sesi onboarding lu udah berakhir. Ketik /start lagi ya.")
             return
             
         data = wizard['data']
-        gender = "L" if call.data == "onboard_gender_L" else "P"
+        gender = "L" if callback.data == "onboard_gender_L" else "P"
         
-        save_user_profile(user_id, data['nama'], data['umur'], data['berat'], data['tinggi'], gender)
-        clear_onboarding_wizard(user_id)
+        await save_user_profile(user_id, data['nama'], data['umur'], data['berat'], data['tinggi'], gender)
+        await clear_onboarding_wizard(user_id)
         
-        ringkasan = buat_ringkasan_dashboard(user_id)
+        ringkasan = await buat_ringkasan_dashboard(user_id)
         teks = f"✅ Mantap! Data lu udah disimpen.\n\nHalo *{data['nama']}*! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try:
-            bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=buat_menu_utama())
+            await callback.message.edit_text(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
         except Exception:
-            bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=buat_menu_utama())
+            await callback.message.answer(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
             
     except Exception as e:
         logger.error(f"[callback_gender] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "menu_utama")
-def callback_menu_utama(call):
+@router.callback_query(F.data == "menu_utama")
+async def callback_menu_utama(callback: CallbackQuery):
     try:
-        bot.answer_callback_query(call.id)
-        user_id = str(call.from_user.id)
-        set_chat_mode(user_id, False) # Matiin mode Chat PT kalau user pencet Menu Utama
+        await callback.answer()
+        user_id = str(callback.from_user.id)
+        await set_chat_mode(user_id, False)
         
-        user = get_user_profile(user_id)
+        user = await get_user_profile(user_id)
         nama = user['nama'] if user else "Bro"
         
-        ringkasan = buat_ringkasan_dashboard(user_id)
+        ringkasan = await buat_ringkasan_dashboard(user_id)
         teks = f"Halo *{nama}*! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try: 
-            bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=buat_menu_utama())
+            await callback.message.edit_text(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
         except Exception: 
-            bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=buat_menu_utama())
+            await callback.message.answer(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
     except Exception as e:
         logger.error(f"[menu_utama] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "menu_stats")
-def callback_menu_stats(call):
+@router.callback_query(F.data == "menu_stats")
+async def callback_menu_stats(callback: CallbackQuery):
     try:
-        user_id = call.from_user.id
-        conn = get_db(); c = conn.cursor()
-        
-        c.execute("SELECT COUNT(*) FROM food_logs WHERE user_id = ?", (str(user_id),))
-        jumlah_makan = c.fetchone()[0]
-        
-        c.execute("SELECT COUNT(*) FROM water_logs WHERE user_id = ?", (str(user_id),))
-        jumlah_air = c.fetchone()[0]
-        
-        c.execute("SELECT COUNT(*) FROM gym_logs WHERE user_id = ?", (str(user_id),))
-        jumlah_gym = c.fetchone()[0]
-        
-        conn.close()
+        user_id = str(callback.from_user.id)
+        async with await get_db() as conn:
+            jumlah_makan = await conn.fetchval("SELECT COUNT(*) FROM food_logs WHERE user_id = $1", user_id)
+            jumlah_air = await conn.fetchval("SELECT COUNT(*) FROM water_logs WHERE user_id = $1", user_id)
+            jumlah_gym = await conn.fetchval("SELECT COUNT(*) FROM gym_logs WHERE user_id = $1", user_id)
 
-        bot.answer_callback_query(call.id)
+        await callback.answer()
         teks = (
             "📊 *STATISTIK GYM LU*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -162,14 +156,14 @@ def callback_menu_stats(call):
             f"💪 Log Latihan: *{jumlah_gym} kali*\n\n"
             "_Terus pakai bot ini biar badan makin gede!_ 🚀"
         )
-        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=tombol_kembali())
-        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=tombol_kembali())
+        try: await callback.message.edit_text(teks, parse_mode="Markdown", reply_markup=tombol_kembali())
+        except Exception: await callback.message.answer(teks, parse_mode="Markdown", reply_markup=tombol_kembali())
     except Exception as e: logger.error(f"[menu_stats] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "menu_help")
-def callback_menu_help(call):
+@router.callback_query(F.data == "menu_help")
+async def callback_menu_help(callback: CallbackQuery):
     try:
-        bot.answer_callback_query(call.id)
+        await callback.answer()
         teks = (
             "❓ *BANTUAN & PANDUAN GYMBOT*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -185,6 +179,6 @@ def callback_menu_help(call):
             "`/gym` — Langsung ke menu program gym\n"
             "`/cancel` — Batalin input yang lagi jalan"
         )
-        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=tombol_kembali())
-        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=tombol_kembali())
+        try: await callback.message.edit_text(teks, parse_mode="Markdown", reply_markup=tombol_kembali())
+        except Exception: await callback.message.answer(teks, parse_mode="Markdown", reply_markup=tombol_kembali())
     except Exception as e: logger.error(f"[menu_help] error: {e}")

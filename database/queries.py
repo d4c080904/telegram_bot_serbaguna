@@ -3,7 +3,6 @@ import logging
 import datetime
 import re
 import json
-import psycopg2
 from database.db import get_db
 from config import CHAT_HISTORY_LIMIT, CHAT_MAX_MESSAGES
 
@@ -16,273 +15,251 @@ def parse_number(val):
         if match: return float(match.group())
     return 0.0
 
-def get_user_profile(user_id):
+async def get_user_profile(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("SELECT nama, umur, berat, tinggi, jenis_kelamin FROM user_profiles WHERE user_id = %s", (str(user_id),))
-        row = c.fetchone(); conn.close()
-        if not row: return None
-        return {'nama': row[0], 'umur': row[1], 'berat': row[2], 'tinggi': row[3], 'jenis_kelamin': row[4]}
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT nama, umur, berat, tinggi, jenis_kelamin FROM user_profiles WHERE user_id = $1", str(user_id))
+            if not row: return None
+            return {'nama': row['nama'], 'umur': row['umur'], 'berat': row['berat'], 'tinggi': row['tinggi'], 'jenis_kelamin': row['jenis_kelamin']}
     except Exception as e: logger.error(f"get_user_profile error: {e}"); return None
 
-def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
+async def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute('''INSERT INTO user_profiles (user_id, nama, umur, berat, tinggi, jenis_kelamin, updated_at) 
-                     VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-                     ON CONFLICT (user_id) DO UPDATE SET 
-                     nama=EXCLUDED.nama, umur=EXCLUDED.umur, berat=EXCLUDED.berat, tinggi=EXCLUDED.tinggi, jenis_kelamin=EXCLUDED.jenis_kelamin, updated_at=CURRENT_TIMESTAMP''', 
-                  (str(user_id), nama, int(umur), float(berat), float(tinggi), jenis_kelamin))
-        tanggal_ini = datetime.date.today().isoformat()
-        c.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES (%s, %s, %s)", (str(user_id), tanggal_ini, float(berat)))
-        conn.commit(); conn.close(); return True
+        async with await get_db() as conn:
+            await conn.execute('''INSERT INTO user_profiles (user_id, nama, umur, berat, tinggi, jenis_kelamin, updated_at) 
+                         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+                         ON CONFLICT (user_id) DO UPDATE SET 
+                         nama=EXCLUDED.nama, umur=EXCLUDED.umur, berat=EXCLUDED.berat, tinggi=EXCLUDED.tinggi, jenis_kelamin=EXCLUDED.jenis_kelamin, updated_at=CURRENT_TIMESTAMP''', 
+                      str(user_id), nama, int(umur), float(berat), float(tinggi), jenis_kelamin)
+            tanggal_ini = datetime.date.today()
+            await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
+            return True
     except Exception as e: logger.error(f"save_user_profile error: {e}"); return False
 
-def update_user_weight(user_id, berat_baru):
+async def update_user_weight(user_id, berat_baru):
     try:
-        conn = get_db(); c = conn.cursor()
-        berat_float = float(parse_number(berat_baru))
-        c.execute("UPDATE user_profiles SET berat = %s WHERE user_id = %s", (berat_float, str(user_id)))
-        tanggal_ini = datetime.date.today().isoformat()
-        c.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES (%s, %s, %s)", (str(user_id), tanggal_ini, berat_float))
-        conn.commit(); conn.close(); return True
+        async with await get_db() as conn:
+            berat_float = float(parse_number(berat_baru))
+            await conn.execute("UPDATE user_profiles SET berat = $1 WHERE user_id = $2", berat_float, str(user_id))
+            tanggal_ini = datetime.date.today()
+            await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, berat_float)
+            return True
     except Exception as e: logger.error(f"update_user_weight error: {e}"); return False
 
-def get_gym_profile(user_id):
+async def get_gym_profile(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute('''SELECT target, level, pengalaman, frekuensi, alat, mode FROM gym_profile WHERE user_id = %s''', (str(user_id),))
-        row_gym = c.fetchone()
-        c.execute("SELECT nama, umur, berat, tinggi, jenis_kelamin FROM user_profiles WHERE user_id = %s", (str(user_id),))
-        row_user = c.fetchone(); conn.close()
-        if not row_user: return None
-        profil = {'nama': row_user[0], 'umur': row_user[1], 'berat': row_user[2], 'tinggi': row_user[3], 'jenis_kelamin': row_user[4]}
-        if row_gym:
-            profil.update({'target': row_gym[0], 'level': row_gym[1], 'pengalaman': row_gym[2], 'frekuensi': row_gym[3], 'alat': row_gym[4], 'mode': row_gym[5] or 'noob'})
-        else:
-            profil.update({'target': None, 'level': None, 'pengalaman': None, 'frekuensi': None, 'alat': None, 'mode': 'noob'})
-        return profil
+        async with await get_db() as conn:
+            row_gym = await conn.fetchrow('''SELECT target, level, pengalaman, frekuensi, alat, mode FROM gym_profile WHERE user_id = $1''', str(user_id))
+            row_user = await conn.fetchrow("SELECT nama, umur, berat, tinggi, jenis_kelamin FROM user_profiles WHERE user_id = $1", str(user_id))
+            if not row_user: return None
+            profil = {'nama': row_user['nama'], 'umur': row_user['umur'], 'berat': row_user['berat'], 'tinggi': row_user['tinggi'], 'jenis_kelamin': row_user['jenis_kelamin']}
+            if row_gym:
+                profil.update({'target': row_gym['target'], 'level': row_gym['level'], 'pengalaman': row_gym['pengalaman'], 'frekuensi': row_gym['frekuensi'], 'alat': row_gym['alat'], 'mode': row_gym['mode'] or 'noob'})
+            else:
+                profil.update({'target': None, 'level': None, 'pengalaman': None, 'frekuensi': None, 'alat': None, 'mode': 'noob'})
+            return profil
     except Exception as e: logger.error(f"get_gym_profile error: {e}"); return None
 
-def save_gym_profile(user_id, data):
+async def save_gym_profile(user_id, data):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute('''INSERT INTO gym_profile (user_id, target, level, pengalaman, frekuensi, alat, mode) 
-                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                     ON CONFLICT (user_id) DO UPDATE SET 
-                     target=EXCLUDED.target, level=EXCLUDED.level, pengalaman=EXCLUDED.pengalaman, frekuensi=EXCLUDED.frekuensi, alat=EXCLUDED.alat, mode=EXCLUDED.mode''', 
-                  (str(user_id), data.get('target'), data.get('level'), data.get('pengalaman'), data.get('frekuensi'), data.get('alat'), data.get('mode', 'noob')))
-        conn.commit(); conn.close(); return True
+        async with await get_db() as conn:
+            await conn.execute('''INSERT INTO gym_profile (user_id, target, level, pengalaman, frekuensi, alat, mode) 
+                         VALUES ($1, $2, $3, $4, $5, $6, $7)
+                         ON CONFLICT (user_id) DO UPDATE SET 
+                         target=EXCLUDED.target, level=EXCLUDED.level, pengalaman=EXCLUDED.pengalaman, frekuensi=EXCLUDED.frekuensi, alat=EXCLUDED.alat, mode=EXCLUDED.mode''', 
+                      str(user_id), data.get('target'), data.get('level'), data.get('pengalaman'), data.get('frekuensi'), data.get('alat'), data.get('mode', 'noob'))
+            return True
     except Exception as e: logger.error(f"save_gym_profile error: {e}"); return False
 
-def simpan_ke_db(user_id, username, teks_asli, teks_rapi):
+async def simpan_ke_db(user_id, username, teks_asli, teks_rapi):
     try:
-        conn = get_db(); cursor = conn.cursor()
-        cursor.execute('''INSERT INTO histori_chat (user_id, username, teks_asli, teks_rapi) VALUES (%s, %s, %s, %s)''', (str(user_id), str(username), teks_asli, teks_rapi))
-        conn.commit(); conn.close()
+        async with await get_db() as conn:
+            await conn.execute('''INSERT INTO histori_chat (user_id, username, teks_asli, teks_rapi) VALUES ($1, $2, $3, $4)''', str(user_id), str(username), teks_asli, teks_rapi)
     except Exception as e: logger.error(f"simpan_ke_db error: {e}")
 
-def cache_get(key):
+async def cache_get(key):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("SELECT hasil FROM cache_ai WHERE key = %s", (key,))
-        row = c.fetchone(); conn.close()
-        return row[0] if row else None
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT hasil FROM cache_ai WHERE key = $1", key)
+            return row['hasil'] if row else None
     except Exception as e: logger.error(f"cache_get error: {e}"); return None
 
-def cache_set(key, hasil):
+async def cache_set(key, hasil):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("INSERT INTO cache_ai (key, hasil) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET hasil = EXCLUDED.hasil", (key, hasil))
-        conn.commit(); conn.close()
+        async with await get_db() as conn:
+            await conn.execute("INSERT INTO cache_ai (key, hasil) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET hasil = EXCLUDED.hasil", key, hasil)
     except Exception as e: logger.error(f"cache_set error: {e}")
 
 def buat_cache_key(prefix, teks):
     h = hashlib.md5(teks.strip().lower().encode('utf-8')).hexdigest()
     return f"{prefix}:{h}"
 
-def is_chat_mode(user_id):
+async def is_chat_mode(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("SELECT is_active FROM chat_sessions WHERE user_id = %s", (str(user_id),))
-        row = c.fetchone(); conn.close()
-        return bool(row and row[0] == 1)
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT is_active FROM chat_sessions WHERE user_id = $1", str(user_id))
+            return bool(row and row['is_active'] == 1)
     except Exception as e: logger.error(f"is_chat_mode error: {e}"); return False
 
-def set_chat_mode(user_id, active):
+async def set_chat_mode(user_id, active):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute('''INSERT INTO chat_sessions (user_id, is_active, last_active) VALUES (%s, %s, CURRENT_TIMESTAMP) 
-                     ON CONFLICT(user_id) DO UPDATE SET is_active = EXCLUDED.is_active, last_active = CURRENT_TIMESTAMP''', (str(user_id), 1 if active else 0))
-        conn.commit(); conn.close(); return True
+        async with await get_db() as conn:
+            await conn.execute('''INSERT INTO chat_sessions (user_id, is_active, last_active) VALUES ($1, $2, CURRENT_TIMESTAMP) 
+                         ON CONFLICT(user_id) DO UPDATE SET is_active = EXCLUDED.is_active, last_active = CURRENT_TIMESTAMP''', str(user_id), 1 if active else 0)
+            return True
     except Exception as e: logger.error(f"set_chat_mode error: {e}"); return False
 
-def simpan_chat_message(user_id, role, content):
+async def simpan_chat_message(user_id, role, content):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("INSERT INTO chat_messages (user_id, role, content) VALUES (%s, %s, %s)", (str(user_id), role, content))
-        c.execute('''DELETE FROM chat_messages WHERE id IN (
-                        SELECT id FROM chat_messages WHERE user_id = %s ORDER BY id DESC OFFSET %s
-                     )''', (str(user_id), CHAT_MAX_MESSAGES))
-        conn.commit(); conn.close()
+        async with await get_db() as conn:
+            await conn.execute("INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)", str(user_id), role, content)
+            await conn.execute('''DELETE FROM chat_messages WHERE id IN (
+                            SELECT id FROM chat_messages WHERE user_id = $1 ORDER BY id DESC OFFSET $2
+                         )''', str(user_id), CHAT_MAX_MESSAGES)
     except Exception as e: logger.error(f"simpan_chat_message error: {e}")
 
-def ambil_chat_history(user_id, limit=CHAT_HISTORY_LIMIT):
+async def ambil_chat_history(user_id, limit=CHAT_HISTORY_LIMIT):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute('''SELECT role, content FROM chat_messages WHERE user_id = %s ORDER BY id DESC LIMIT %s''', (str(user_id), limit))
-        rows = c.fetchall(); conn.close()
-        return [{"role": role, "content": content} for role, content in reversed(rows)]
+        async with await get_db() as conn:
+            rows = await conn.fetch('''SELECT role, content FROM chat_messages WHERE user_id = $1 ORDER BY id DESC LIMIT $2''', str(user_id), limit)
+            return [{"role": row['role'], "content": row['content']} for row in reversed(rows)]
     except Exception as e: logger.error(f"ambil_chat_history error: {e}"); return []
 
-def hapus_chat_history(user_id):
+async def hapus_chat_history(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("DELETE FROM chat_messages WHERE user_id = %s", (str(user_id),))
-        conn.commit(); conn.close(); return True
+        async with await get_db() as conn:
+            await conn.execute("DELETE FROM chat_messages WHERE user_id = $1", str(user_id))
+            return True
     except Exception as e: logger.error(f"hapus_chat_history error: {e}"); return False
 
-def cek_duplikat_foto(user_id, photo_hash):
+async def cek_duplikat_foto(user_id, photo_hash):
     try:
-        conn = get_db(); c = conn.cursor()
-        tanggal_ini = datetime.date.today().isoformat()
-        c.execute("SELECT id FROM food_logs WHERE user_id = %s AND photo_hash = %s AND tanggal = %s", (str(user_id), photo_hash, tanggal_ini))
-        row = c.fetchone(); conn.close(); return bool(row)
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            row = await conn.fetchrow("SELECT id FROM food_logs WHERE user_id = $1 AND photo_hash = $2 AND tanggal = $3", str(user_id), photo_hash, tanggal_ini)
+            return bool(row)
     except Exception as e: logger.error(f"cek_duplikat_foto error: {e}"); return False
 
-def tambah_food_log(user_id, message_id, photo_message_id, photo_hash, nama, porsi, kalori, protein, karbo, lemak, gula):
+async def tambah_food_log(user_id, message_id, photo_message_id, photo_hash, nama, porsi, kalori, protein, karbo, lemak, gula):
     try:
-        conn = get_db(); c = conn.cursor()
-        tanggal_ini = datetime.date.today().isoformat()
-        kal = int(parse_number(kalori)); pro = float(parse_number(protein))
-        kar = float(parse_number(karbo)); lem = float(parse_number(lemak))
-        gul = float(parse_number(gula))
-        if isinstance(nama, list): nama = ", ".join(map(str, nama))
-        else: nama = str(nama)
-        
-        c.execute('''INSERT INTO food_logs (user_id, message_id, photo_message_id, photo_hash, tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula) 
-                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''', 
-                  (str(user_id), message_id, photo_message_id, photo_hash, tanggal_ini, nama, porsi, kal, pro, kar, lem, gul))
-        conn.commit(); conn.close(); return True
-        
-    except psycopg2.IntegrityError:
-        logger.warning(f"⚠️ Duplikat dicegah DB: user {user_id}, hash {photo_hash}")
-        if 'conn' in locals(): conn.close()
-        return False
-    except Exception as e: 
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            kal = int(parse_number(kalori)); pro = float(parse_number(protein))
+            kar = float(parse_number(karbo)); lem = float(parse_number(lemak))
+            gul = float(parse_number(gula))
+            if isinstance(nama, list): nama = ", ".join(map(str, nama))
+            else: nama = str(nama)
+            
+            await conn.execute('''INSERT INTO food_logs (user_id, message_id, photo_message_id, photo_hash, tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula) 
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)''', 
+                      str(user_id), message_id, photo_message_id, photo_hash, tanggal_ini, nama, porsi, kal, pro, kar, lem, gul)
+            return True
+            
+    except Exception as e:
+        if "duplicate key value violates unique constraint" in str(e):
+            logger.warning(f"⚠️ Duplikat dicegah DB: user {user_id}, hash {photo_hash}")
+            return False
         logger.error(f"tambah_food_log error: {e}")
-        if 'conn' in locals(): conn.close()
         return False
 
-def cek_id_makanan(user_id, reply_msg_id):
+async def cek_id_makanan(user_id, reply_msg_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute('''SELECT id FROM food_logs WHERE user_id = %s AND (message_id = %s OR photo_message_id = %s)''', (str(user_id), reply_msg_id, reply_msg_id))
-        row = c.fetchone(); conn.close(); return bool(row)
+        async with await get_db() as conn:
+            row = await conn.fetchrow('''SELECT id FROM food_logs WHERE user_id = $1 AND (message_id = $2 OR photo_message_id = $2)''', str(user_id), reply_msg_id)
+            return bool(row)
     except Exception as e: logger.error(f"cek_id_makanan error: {e}"); return False
 
-def update_food_log(user_id, reply_msg_id, nama, porsi, kalori, protein, karbo, lemak, gula):
+async def update_food_log(user_id, reply_msg_id, nama, porsi, kalori, protein, karbo, lemak, gula):
     try:
-        conn = get_db(); c = conn.cursor()
-        kal = int(parse_number(kalori)); pro = float(parse_number(protein))
-        kar = float(parse_number(karbo)); lem = float(parse_number(lemak))
-        gul = float(parse_number(gula))
-        if isinstance(nama, list): nama = ", ".join(map(str, nama))
-        else: nama = str(nama)
-        c.execute('''UPDATE food_logs SET nama_makanan=%s, estimasi_porsi=%s, kalori=%s, protein=%s, karbo=%s, lemak=%s, gula=%s 
-                     WHERE user_id=%s AND (message_id=%s OR photo_message_id=%s)''', 
-                  (nama, porsi, kal, pro, kar, lem, gul, str(user_id), reply_msg_id, reply_msg_id))
-        affected = c.rowcount; conn.commit(); conn.close(); return affected > 0
+        async with await get_db() as conn:
+            kal = int(parse_number(kalori)); pro = float(parse_number(protein))
+            kar = float(parse_number(karbo)); lem = float(parse_number(lemak))
+            gul = float(parse_number(gula))
+            if isinstance(nama, list): nama = ", ".join(map(str, nama))
+            else: nama = str(nama)
+            result = await conn.execute('''UPDATE food_logs SET nama_makanan=$1, estimasi_porsi=$2, kalori=$3, protein=$4, karbo=$5, lemak=$6, gula=$7 
+                         WHERE user_id=$8 AND (message_id=$9 OR photo_message_id=$9)''', 
+                      nama, porsi, kal, pro, kar, lem, gul, str(user_id), reply_msg_id)
+            return int(result.split(" ")[1]) > 0
     except Exception as e: logger.error(f"update_food_log error: {e}"); return False
 
-def get_total_makro_hari_ini(user_id):
+async def get_total_makro_hari_ini(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        tanggal_ini = datetime.date.today().isoformat()
-        c.execute("SELECT SUM(kalori), SUM(gula) FROM food_logs WHERE user_id = %s AND tanggal = %s", (str(user_id), tanggal_ini))
-        row = c.fetchone(); conn.close()
-        return (row[0] if row[0] else 0), (row[1] if row[1] else 0)
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            row = await conn.fetchrow("SELECT SUM(kalori) as kal, SUM(gula) as gul FROM food_logs WHERE user_id = $1 AND tanggal = $2", str(user_id), tanggal_ini)
+            return (row['kal'] if row['kal'] else 0), (row['gul'] if row['gul'] else 0)
     except Exception as e: logger.error(f"get_total_makro error: {e}"); return 0, 0
 
-def get_history_makanan_hari_ini(user_id):
+async def get_history_makanan_hari_ini(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        tanggal_ini = datetime.date.today().isoformat()
-        c.execute("SELECT nama_makanan, estimasi_porsi, kalori, gula, waktu FROM food_logs WHERE user_id = %s AND tanggal = %s ORDER BY id ASC", (str(user_id), tanggal_ini))
-        rows = c.fetchall(); conn.close(); return rows
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            return await conn.fetch("SELECT nama_makanan, estimasi_porsi, kalori, gula, waktu FROM food_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id ASC", str(user_id), tanggal_ini)
     except Exception as e: logger.error(f"get_history error: {e}"); return []
 
-def hapus_log_terakhir(user_id):
+async def hapus_log_terakhir(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute('''DELETE FROM food_logs WHERE id = (SELECT id FROM food_logs WHERE user_id = %s ORDER BY id DESC LIMIT 1)''', (str(user_id),))
-        affected = c.rowcount; conn.commit(); conn.close(); return affected > 0
+        async with await get_db() as conn:
+            result = await conn.execute('''DELETE FROM food_logs WHERE id = (SELECT id FROM food_logs WHERE user_id = $1 ORDER BY id DESC LIMIT 1)''', str(user_id))
+            return int(result.split(" ")[1]) > 0
     except Exception as e: logger.error(f"hapus_log_terakhir error: {e}"); return False
 
-def tambah_air(user_id, ml):
+async def tambah_air(user_id, ml):
     try:
-        conn = get_db(); c = conn.cursor()
-        tanggal_ini = datetime.date.today().isoformat()
-        c.execute("INSERT INTO water_logs (user_id, tanggal, ml) VALUES (%s, %s, %s)", (str(user_id), tanggal_ini, ml))
-        conn.commit(); conn.close(); return True
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            await conn.execute("INSERT INTO water_logs (user_id, tanggal, ml) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, ml)
+            return True
     except Exception as e: logger.error(f"tambah_air error: {e}"); return False
 
-def get_total_air_hari_ini(user_id):
+async def get_total_air_hari_ini(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        tanggal_ini = datetime.date.today().isoformat()
-        c.execute("SELECT SUM(ml) FROM water_logs WHERE user_id = %s AND tanggal = %s", (str(user_id), tanggal_ini))
-        total = c.fetchone()[0]; conn.close(); return total if total else 0
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            row = await conn.fetchrow("SELECT SUM(ml) as ml FROM water_logs WHERE user_id = $1 AND tanggal = $2", str(user_id), tanggal_ini)
+            return row['ml'] if row['ml'] else 0
     except Exception as e: logger.error(f"get_total_air error: {e}"); return 0
 
-def get_berat_terakhir(user_id):
+async def get_berat_terakhir(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("SELECT berat, tanggal FROM weight_logs WHERE user_id = %s ORDER BY id DESC LIMIT 2", (str(user_id),))
-        rows = c.fetchall(); conn.close(); return rows
+        async with await get_db() as conn:
+            return await conn.fetch("SELECT berat, tanggal FROM weight_logs WHERE user_id = $1 ORDER BY id DESC LIMIT 2", str(user_id))
     except Exception as e: logger.error(f"get_berat_terakhir error: {e}"); return []
 
-def get_all_data_for_export(user_id):
+async def get_all_data_for_export(user_id):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("SELECT tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula, waktu FROM food_logs WHERE user_id = %s ORDER BY tanggal DESC", (str(user_id),))
-        food_data = c.fetchall()
-        
-        c.execute("SELECT tanggal, ml, waktu FROM water_logs WHERE user_id = %s ORDER BY tanggal DESC", (str(user_id),))
-        water_data = c.fetchall()
-        
-        c.execute("SELECT tanggal, berat, waktu FROM weight_logs WHERE user_id = %s ORDER BY tanggal DESC", (str(user_id),))
-        weight_data = c.fetchall()
-        
-        conn.close()
-        return food_data, water_data, weight_data
+        async with await get_db() as conn:
+            food_data = await conn.fetch("SELECT tanggal, nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula, waktu FROM food_logs WHERE user_id = $1 ORDER BY tanggal DESC", str(user_id))
+            water_data = await conn.fetch("SELECT tanggal, ml, waktu FROM water_logs WHERE user_id = $1 ORDER BY tanggal DESC", str(user_id))
+            weight_data = await conn.fetch("SELECT tanggal, berat, waktu FROM weight_logs WHERE user_id = $1 ORDER BY tanggal DESC", str(user_id))
+            return food_data, water_data, weight_data
     except Exception as e: logger.error(f"get_all_data_for_export error: {e}"); return [], [], []
 
-def save_wizard_state(user_id, state_type, step, data):
+async def save_wizard_state(user_id, state_type, step, data):
     try:
-        conn = get_db(); c = conn.cursor()
-        data_json = json.dumps(data)
-        c.execute('''INSERT INTO wizard_states (user_id, state_type, step, data, updated_at) 
-                     VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
-                     ON CONFLICT (user_id, state_type) DO UPDATE SET 
-                     step = EXCLUDED.step, data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP''', 
-                  (str(user_id), state_type, step, data_json))
-        conn.commit(); conn.close(); return True
+        async with await get_db() as conn:
+            data_json = json.dumps(data)
+            await conn.execute('''INSERT INTO wizard_states (user_id, state_type, step, data, updated_at) 
+                         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                         ON CONFLICT (user_id, state_type) DO UPDATE SET 
+                         step = EXCLUDED.step, data = EXCLUDED.data, updated_at = CURRENT_TIMESTAMP''', 
+                      str(user_id), state_type, step, data_json)
+            return True
     except Exception as e: logger.error(f"save_wizard_state error: {e}"); return False
 
-def get_wizard_state(user_id, state_type):
+async def get_wizard_state(user_id, state_type):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("SELECT step, data FROM wizard_states WHERE user_id = %s AND state_type = %s", (str(user_id), state_type))
-        row = c.fetchone(); conn.close()
-        if row:
-            return {'step': row[0], 'data': json.loads(row[1])}
-        return None
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT step, data FROM wizard_states WHERE user_id = $1 AND state_type = $2", str(user_id), state_type)
+            if row:
+                return {'step': row['step'], 'data': json.loads(row['data'])}
+            return None
     except Exception as e: logger.error(f"get_wizard_state error: {e}"); return None
 
-def delete_wizard_state(user_id, state_type):
+async def delete_wizard_state(user_id, state_type):
     try:
-        conn = get_db(); c = conn.cursor()
-        c.execute("DELETE FROM wizard_states WHERE user_id = %s AND state_type = %s", (str(user_id), state_type))
-        conn.commit(); conn.close(); return True
+        async with await get_db() as conn:
+            await conn.execute("DELETE FROM wizard_states WHERE user_id = $1 AND state_type = $2", str(user_id), state_type)
+            return True
     except Exception as e: logger.error(f"delete_wizard_state error: {e}"); return False

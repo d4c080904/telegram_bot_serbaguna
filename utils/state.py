@@ -1,28 +1,21 @@
 from database.queries import save_wizard_state, get_wizard_state, delete_wizard_state
 
-# --- GYM WIZARD ---
-def set_gym_wizard(user_id, mode, step, data=None):
-    state_data = {'mode': mode, 'data': data or {}}
-    save_wizard_state(user_id, 'gym', step, state_data)
+# ONBOARDING WIZARD
+async def set_onboarding_wizard(user_id, step, data):
+    await save_wizard_state(user_id, "onboarding", step, data)
 
-def get_gym_wizard(user_id):
-    state = get_wizard_state(user_id, 'gym')
-    if state:
-        return {'mode': state['data'].get('mode'), 'step': state['step'], 'data': state['data'].get('data', {})}
-    return None
+async def get_onboarding_wizard(user_id):
+    return await get_wizard_state(user_id, "onboarding")
 
-def clear_gym_wizard(user_id):
-    delete_wizard_state(user_id, 'gym')
+async def clear_onboarding_wizard(user_id):
+    await delete_wizard_state(user_id, "onboarding")
 
-# --- ONBOARDING WIZARD ---
-def set_onboarding_wizard(user_id, step, data=None):
-    save_wizard_state(user_id, 'onboarding', step, data or {})
+# GYM WIZARD
+async def set_gym_wizard(user_id, mode, step):
+    await save_wizard_state(user_id, "gym", step, {"mode": mode})
 
-def get_onboarding_wizard(user_id):
-    state = get_wizard_state(user_id, 'onboarding')
-    if state:
-        return {'step': state['step'], 'data': state['data']}
-    return None
+async def get_gym_wizard(user_id):
+    return await get_wizard_state(user_id, "gym")
 
-def clear_onboarding_wizard(user_id):
-    delete_wizard_state(user_id, 'onboarding')
+async def clear_gym_wizard(user_id):
+    await delete_wizard_state(user_id, "gym")

@@ -1,7 +1,12 @@
+import asyncio
 import logging
-from telebot.types import BotCommand
-from bot_instance import bot
-from database.db import setup_db
+from aiogram import Bot
+from aiogram.types import BotCommand
+from bot_instance import bot, dp
+from database.db import create_pool, setup_db, close_pool
+
+# IMPORT ROUTER
+from handlers import start as start_router
 
 # Setup Logging
 logging.basicConfig(
@@ -12,29 +17,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Set Commands
-bot.set_my_commands([
-    BotCommand("start", "🏠 Menu utama & perkenalan"),
-    BotCommand("menu", "🏠 Buka menu utama lagi"),
-    BotCommand("help", "❓ Panduan lengkap"),
-    BotCommand("gym", "💪 Asisten Gym pribadi"),
-    BotCommand("cancel", "❌ Batalin input yang lagi jalan"),
-    BotCommand("stats", "📊 Statistik pemakaian lu"),
-])
+async def set_bot_commands(bot: Bot):
+    commands = [
+        BotCommand(command="start", description="🏠 Menu utama & perkenalan"),
+        BotCommand(command="menu", description="🏠 Buka menu utama lagi"),
+        BotCommand(command="help", description="❓ Panduan lengkap"),
+        BotCommand(command="gym", description="💪 Asisten Gym pribadi"),
+        BotCommand(command="cancel", description="❌ Batalin input yang lagi jalan"),
+        BotCommand(command="stats", description="📊 Statistik pemakaian lu"),
+    ]
+    await bot.set_my_commands(commands)
 
-# IMPORT SEMUA HANDLERS
-import handlers.start
-import handlers.gym
-import handlers.calorie
-import handlers.voice
-import handlers.progress
-import handlers.meal_planner
-import handlers.export
-import handlers.equipment
-import handlers.pt_chat
-import handlers.router
+async def main():
+    logger.info("🚀 Memulai GymBot AI (Async Engine)...")
+    
+    await create_pool()
+    await setup_db()
+    await set_bot_commands(bot)
+    
+    # DAFTARIN ROUTER DI SINI
+    dp.include_router(start_router.router)
+    logger.info("✅ Router Start berhasil didaftarkan.")
+    
+    logger.info("✅ Bot berhasil jalan! (Mode Async)")
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await close_pool()
+        await bot.session.close()
+        logger.info("🔌 Bot dimatikan dengan bersih.")
 
 if __name__ == "__main__":
-    setup_db()
-    logger.info("🚀 GymBot AI (Fitness & Nutrition) berhasil jalan!")
-    bot.infinity_polling()
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot dihentikan manual.")
