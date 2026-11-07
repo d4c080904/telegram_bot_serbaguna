@@ -1,31 +1,38 @@
 # ==========================================
-# FILE RAHASIA & ENVIRONMENT
+# 1. FILE RAHASIA & ENVIRONMENT
 # ==========================================
 .env
 cookies.txt
 venv/
+.venv/
 env/
 
 # ==========================================
-# DATABASE & LOG
+# 2. DATABASE & LOG
 # ==========================================
 *.db
 *.db-shm
 *.db-wal
-bot.log
 *.log
+bot.log
 
 # ==========================================
-# FILE SAMPAH PYTHON
+# 3. PYTHON & TESTING CACHE
 # ==========================================
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 .pytest_cache/
 
 # ==========================================
-# FILE VIDEO TEMPORARY
+# 4. MEDIA TEMPORARY
 # ==========================================
 video_*.mp4
 dl_*/
+
+# ==========================================
+# 5. OS / EDITOR (ANTISIPASI)
+# ==========================================
+.DS_Store
+Thumbs.db
+.vscode/
