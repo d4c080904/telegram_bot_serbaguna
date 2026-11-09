@@ -1,19 +1,22 @@
-from bot_instance import bot
-from telebot import types
+import logging
+from aiogram import Router, F
+from aiogram.filters import Command
+from aiogram.types import Message, CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
 from database.queries import get_gym_profile, save_gym_profile
 from database.db import get_db
-from services.ai import analisis_gym_noob, analisis_gym_pro
-from utils.decorators import rate_limited
+from services.ai import analisis_gym_noob, analisis_gym_pro, MODEL_GROQ_LIST
 from utils.helpers import hitung_bmi, kategori_bmi, strip_markdown
 from utils.state import set_gym_wizard, get_gym_wizard, clear_gym_wizard
-import logging
+from bot_instance import groq_client
 
 logger = logging.getLogger(__name__)
+router = Router()
 
-def tampil_menu_gym(chat_id, user_id, message_id=None):
-    profil = get_gym_profile(user_id)
+async def tampil_menu_gym(chat_id, user_id, message_id=None, bot=None):
+    profil = await get_gym_profile(user_id)
     
-    # FIX: Cek profil aman
     if profil:
         nama = profil.get('nama') or "Bro"
         data_text = f"{profil.get('umur') or '-'}th, {profil.get('berat') or '-'}kg, {profil.get('tinggi') or '-'}cm"
@@ -22,41 +25,39 @@ def tampil_menu_gym(chat_id, user_id, message_id=None):
         data_text = "Belum diisi"
         
     teks = (
-        f"💪 *ASISTEN GYM PRIBADI*\n"
+        f"💪 <b>ASISTEN GYM PRIBADI</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"Halo *{nama}*!\n"
+        f"Halo <b>{nama}</b>!\n"
         f"Data saat ini: {data_text}\n\n"
         "Pilih mode program latihan lu:"
     )
     
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("🆕 Mode Baru Gym", callback_data="gym_noob_start"),
-        types.InlineKeyboardButton("💪 Mode Pro Gym", callback_data="gym_pro_start")
-    )
-    markup.add(
-        types.InlineKeyboardButton("📊 Profil Saya", callback_data="gym_view_profile"),
-        types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info")
-    )
-    markup.add(types.InlineKeyboardButton("🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode"))
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🆕 Mode Baru Gym", callback_data="gym_noob_start")
+    builder.button(text="💪 Mode Pro Gym", callback_data="gym_pro_start")
+    builder.button(text="📊 Profil Saya", callback_data="gym_view_profile")
+    builder.button(text="📝 Log Latihan", callback_data="gym_log_info")
+    builder.button(text="🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode")
+    builder.adjust(2, 2, 1)
     
     try:
         if message_id:
-            bot.edit_message_text(teks, chat_id, message_id, parse_mode='Markdown', reply_markup=markup)
+            await bot.edit_message_text(teks, chat_id=chat_id, message_id=message_id, parse_mode="HTML", reply_markup=builder.as_markup())
         else:
-            bot.send_message(chat_id, teks, parse_mode='Markdown', reply_markup=markup)
+            await bot.send_message(chat_id, teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e:
         logger.error(f"tampil_menu_gym error: {e}")
 
-def tampil_profil_gym(chat_id, user_id, message_id=None):
-    profil = get_gym_profile(user_id)
+async def tampil_profil_gym(chat_id, user_id, message_id=None, bot=None):
+    profil = await get_gym_profile(user_id)
     
     if not profil:
-        teks = "⚠️ *Lu belum punya profil Gym.*\n\nIsi profil dulu di menu awal ya."
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Kembali", callback_data="menu_gym"))
+        teks = "⚠️ <b>Lu belum punya profil Gym.</b>\n\nIsi profil dulu di menu awal ya."
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔙 Kembali", callback_data="menu_gym")
         try:
-            if message_id: bot.edit_message_text(teks, chat_id, message_id, parse_mode='Markdown', reply_markup=markup)
-            else: bot.send_message(chat_id, teks, parse_mode='Markdown', reply_markup=markup)
+            if message_id: await bot.edit_message_text(teks, chat_id=chat_id, message_id=message_id, parse_mode="HTML", reply_markup=builder.as_markup())
+            else: await bot.send_message(chat_id, teks, parse_mode="HTML", reply_markup=builder.as_markup())
         except Exception: pass
         return
         
@@ -65,62 +66,55 @@ def tampil_profil_gym(chat_id, user_id, message_id=None):
     mode_label = "🆕 Baru Gym" if profil.get('mode') == 'noob' else "💪 Pro Gym"
     
     teks = (
-        f"📊 *PROFIL GYM LU*\n"
+        f"📊 <b>PROFIL GYM LU</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"Mode: *{mode_label}*\n\n"
-        f"👤 Umur: *{profil.get('umur') or 'N/A'}* tahun\n"
-        f"⚖️ Berat: *{profil.get('berat') or 'N/A'}* kg\n"
-        f"📏 Tinggi: *{profil.get('tinggi') or 'N/A'}* cm\n"
-        f"📈 BMI: *{bmi or 'N/A'}* ({kategori})\n"
+        f"Mode: <b>{mode_label}</b>\n\n"
+        f"👤 Umur: <b>{profil.get('umur') or 'N/A'}</b> tahun\n"
+        f"⚖️ Berat: <b>{profil.get('berat') or 'N/A'}</b> kg\n"
+        f"📏 Tinggi: <b>{profil.get('tinggi') or 'N/A'}</b> cm\n"
+        f"📈 BMI: <b>{bmi or 'N/A'}</b> ({kategori})\n"
     )
     
     if profil.get('mode') == 'pro':
         teks += (
-            f"\n🎯 Target: *{profil.get('target') or 'N/A'}*\n"
-            f"🎓 Level: *{profil.get('level') or 'N/A'}*\n"
-            f"⏳ Pengalaman: *{profil.get('pengalaman') or 'N/A'}* tahun\n"
-            f"📅 Frekuensi: *{profil.get('frekuensi') or 'N/A'}*x/minggu\n"
-            f"🏋️ Alat: *{profil.get('alat') or 'N/A'}*\n"
+            f"\n🎯 Target: <b>{profil.get('target') or 'N/A'}</b>\n"
+            f"🎓 Level: <b>{profil.get('level') or 'N/A'}</b>\n"
+            f"⏳ Pengalaman: <b>{profil.get('pengalaman') or 'N/A'}</b> tahun\n"
+            f"📅 Frekuensi: <b>{profil.get('frekuensi') or 'N/A'}</b>x/minggu\n"
+            f"🏋️ Alat: <b>{profil.get('alat') or 'N/A'}</b>\n"
         )
         
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("🔄 Daftar Ulang", callback_data=f"gym_{profil.get('mode')}_start"),
-        types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info")
-    )
-    markup.add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔄 Daftar Ulang", callback_data=f"gym_{profil.get('mode')}_start")
+    builder.button(text="📝 Log Latihan", callback_data="gym_log_info")
+    builder.button(text="🔙 Menu Gym", callback_data="menu_gym")
+    builder.adjust(2, 1)
     
     try:
-        if message_id: bot.edit_message_text(teks, chat_id, message_id, parse_mode='Markdown', reply_markup=markup)
-        else: bot.send_message(chat_id, teks, parse_mode='Markdown', reply_markup=markup)
+        if message_id: await bot.edit_message_text(teks, chat_id=chat_id, message_id=message_id, parse_mode="HTML", reply_markup=builder.as_markup())
+        else: await bot.send_message(chat_id, teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e: logger.error(f"tampil_profil_gym error: {e}")
 
-# --- HANDLER GYM ---
-@bot.message_handler(commands=['gym'])
-@rate_limited
-def handler_gym(pesan):
+@router.message(Command("gym"))
+async def handler_gym(message: Message):
     try:
-        user_id = str(pesan.from_user.id)
-        teks_perintah = pesan.text.replace("/gym", "").strip()
+        user_id = str(message.from_user.id)
+        teks_perintah = message.text.replace("/gym", "").strip()
         
         if not teks_perintah:
-            tampil_menu_gym(pesan.chat.id, user_id)
+            await tampil_menu_gym(message.chat.id, user_id, bot=message.bot)
             return
             
-        profil = get_gym_profile(user_id)
+        profil = await get_gym_profile(user_id)
         if not profil:
-            bot.reply_to(pesan, "⚠️ Lu belum punya profil Gym nih.\n\nBikin dulu dengan ketik `/gym` (tanpa teks).", parse_mode='Markdown')
+            await message.reply("⚠️ Lu belum punya profil Gym nih.\n\nBikin dulu dengan ketik /gym (tanpa teks).", parse_mode="HTML")
             return
             
-        conn = get_db()
-        c = conn.cursor()
-        # FIX: PostgreSQL pakai %s
-        c.execute("INSERT INTO gym_logs (user_id, log_teks) VALUES (%s, %s)", (user_id, teks_perintah))
-        conn.commit()
-        conn.close()
+        async with await get_db() as conn:
+            await conn.execute("INSERT INTO gym_logs (user_id, log_teks) VALUES ($1, $2)", user_id, teks_perintah)
         
-        bot.send_chat_action(pesan.chat.id, 'typing')
-        pesan_tunggu = bot.reply_to(pesan, "⏳ _PT AI lu lagi evaluasi..._", parse_mode="Markdown")
+        await message.bot.send_chat_action(message.chat.id, 'typing')
+        pesan_tunggu = await message.reply("⏳ <i>PT AI lu lagi evaluasi...</i>", parse_mode="HTML")
         
         mode = profil.get('mode')
         if mode == 'noob':
@@ -140,13 +134,10 @@ def handler_gym(pesan):
                 f"JANGAN pakai markdown (** atau * atau `). Tulis teks polos aja."
             )
             
-        from services.ai import MODEL_GROQ_LIST
-        from bot_instance import groq_client
         hasil = None
-        
         for model_name in MODEL_GROQ_LIST:
             try:
-                response = groq_client.chat.completions.create(
+                response = await groq_client.chat.completions.create(
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": teks_perintah}
@@ -164,27 +155,25 @@ def handler_gym(pesan):
                 continue
                 
         if hasil:
-            try:
-                bot.edit_message_text(hasil, pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown')
-            except Exception:
-                bot.edit_message_text(strip_markdown(hasil), pesan.chat.id, pesan_tunggu.message_id)
+            try: await pesan_tunggu.edit_text(hasil, parse_mode="HTML")
+            except Exception: await pesan_tunggu.edit_text(strip_markdown(hasil))
         else:
-            bot.edit_message_text("❌ AI lagi error nih bro. Coba lagi bentar ya.", pesan.chat.id, pesan_tunggu.message_id)
+            await pesan_tunggu.edit_text("❌ AI lagi error nih bro. Coba lagi bentar ya.")
             
     except Exception as e:
         logger.error(f"[gym] error: {e}")
-        try: bot.reply_to(pesan, "❌ Ada error di fitur gym. Coba lagi nanti.")
+        try: await message.reply("❌ Ada error di fitur gym. Coba lagi nanti.")
         except Exception: pass
 
-def proses_gym_wizard(pesan, wizard):
-    user_id = pesan.from_user.id
-    teks = pesan.text.strip()
+async def proses_gym_wizard(message: Message, wizard: dict):
+    user_id = str(message.from_user.id)
+    teks = message.text.strip()
     mode = wizard.get('mode')
     
     if mode == 'pro':
         parts = [p.strip().lower() for p in teks.split('|')]
         if len(parts) != 5:
-            bot.reply_to(pesan, "❌ Format salah bro.\n\nKirim pakai format:\n`target | level | pengalaman | frekuensi | alat`\n\nContoh:\n`cutting | intermediate | 3 | 5 | gym_full`", parse_mode='Markdown')
+            await message.reply("❌ Format salah bro.\n\nKirim pakai format:\n<code>target | level | pengalaman | frekuensi | alat</code>\n\nContoh:\n<code>cutting | intermediate | 3 | 5 | gym_full</code>", parse_mode="HTML")
             return
         try:
             target = parts[0]
@@ -193,121 +182,125 @@ def proses_gym_wizard(pesan, wizard):
             frekuensi = int(parts[3])
             alat = parts[4]
         except ValueError:
-            bot.reply_to(pesan, "❌ Ada format yang salah. Coba lagi.")
+            await message.reply("❌ Ada format yang salah. Coba lagi.")
             return
             
         if target not in ('bulking', 'cutting', 'recomp', 'strength') or level not in ('beginner', 'intermediate', 'advanced') or alat not in ('gym_full', 'home_dumbbell', 'home_barbell', 'bodyweight'):
-            bot.reply_to(pesan, "❌ Pilihan teks salah. Cek lagi formatnya.")
+            await message.reply("❌ Pilihan teks salah. Cek lagi formatnya.")
             return
             
         data_pro = {'mode': 'pro', 'target': target, 'level': level, 'pengalaman': pengalaman, 'frekuensi': frekuensi, 'alat': alat}
-        save_gym_profile(user_id, data_pro)
-        clear_gym_wizard(user_id)
+        await save_gym_profile(user_id, data_pro)
+        await clear_gym_wizard(user_id)
         
-        profil = get_gym_profile(user_id)
+        profil = await get_gym_profile(user_id)
         if not profil:
-            bot.reply_to(pesan, "❌ Gagal ambil data profil.")
+            await message.reply("❌ Gagal ambil data profil.")
             return
             
-        # FIX: Hapus parse_mode Markdown biar gak error
-        bot.reply_to(pesan, "✅ Data program Pro disimpan!\n\n⏳ AI lagi nyiapin analisis advanced...")
-        bot.send_chat_action(pesan.chat.id, 'typing')
+        await message.reply("✅ Data program Pro disimpan!\n\n⏳ <i>AI lagi nyiapin analisis advanced...</i>", parse_mode="HTML")
+        await message.bot.send_chat_action(message.chat.id, 'typing')
         
         data_pro.update({'umur': profil.get('umur'), 'berat': profil.get('berat'), 'tinggi': profil.get('tinggi'), 'jenis_kelamin': profil.get('jenis_kelamin')})
-        hasil = analisis_gym_pro(data_pro)
+        hasil = await analisis_gym_pro(data_pro)
         
         if hasil:
-            try: bot.send_message(pesan.chat.id, hasil, parse_mode='Markdown')
-            except Exception: bot.send_message(pesan.chat.id, strip_markdown(hasil))
+            try: await message.answer(hasil, parse_mode="HTML")
+            except Exception: await message.answer(strip_markdown(hasil))
         else:
-            bot.send_message(pesan.chat.id, "❌ AI-nya lagi error. Coba lagi nanti ya.")
+            await message.answer("❌ AI-nya lagi error. Coba lagi nanti ya.")
             
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add(types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info"), types.InlineKeyboardButton("📊 Profil Saya", callback_data="gym_view_profile"))
-        markup.add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
-        bot.send_message(pesan.chat.id, "👇 Selanjutnya lu bisa:", reply_markup=markup)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📝 Log Latihan", callback_data="gym_log_info")
+        builder.button(text="📊 Profil Saya", callback_data="gym_view_profile")
+        builder.button(text="🔙 Menu Gym", callback_data="menu_gym")
+        builder.adjust(2, 1)
+        await message.answer("👇 Selanjutnya lu bisa:", reply_markup=builder.as_markup())
         return
 
-@bot.callback_query_handler(func=lambda call: call.data == "menu_gym")
-def callback_menu_gym(call):
+@router.callback_query(F.data == "menu_gym")
+async def callback_menu_gym(callback: CallbackQuery):
     try:
-        bot.answer_callback_query(call.id)
-        clear_gym_wizard(call.from_user.id)
-        tampil_menu_gym(call.message.chat.id, call.from_user.id, call.message.message_id)
+        await callback.answer()
+        await clear_gym_wizard(str(callback.from_user.id))
+        await tampil_menu_gym(callback.message.chat.id, str(callback.from_user.id), callback.message.message_id, callback.bot)
     except Exception as e: logger.error(f"[menu_gym] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "gym_noob_start")
-def callback_gym_noob_start(call):
+@router.callback_query(F.data == "gym_noob_start")
+async def callback_gym_noob_start(callback: CallbackQuery):
     try:
-        user_id = str(call.from_user.id)
-        bot.answer_callback_query(call.id, "⏳ Nyiapin panduan...")
+        user_id = str(callback.from_user.id)
+        await callback.answer("⏳ Nyiapin panduan...")
         
-        profil = get_gym_profile(user_id)
+        profil = await get_gym_profile(user_id)
         if not profil:
-            bot.send_message(call.message.chat.id, "⚠️ Lu belum isi profil di awal. Ketik /start dulu ya.")
+            await callback.message.answer("⚠️ Lu belum isi profil di awal. Ketik /start dulu ya.")
             return
             
-        save_gym_profile(user_id, {'mode': 'noob', 'target': 'recomp'})
+        await save_gym_profile(user_id, {'mode': 'noob', 'target': 'recomp'})
         
-        bot.edit_message_text("⏳ _AI lagi nyiapin panduan buat lu..._", call.message.chat.id, call.message.message_id)
-        bot.send_chat_action(call.message.chat.id, 'typing')
+        await callback.message.edit_text("⏳ <i>AI lagi nyiapin panduan buat lu...</i>", parse_mode="HTML")
+        await callback.bot.send_chat_action(callback.message.chat.id, 'typing')
         
-        hasil = analisis_gym_noob(profil.get('umur'), profil.get('berat'), profil.get('tinggi'))
+        hasil = await analisis_gym_noob(profil.get('umur'), profil.get('berat'), profil.get('tinggi'))
         
         if hasil:
-            try: bot.send_message(call.message.chat.id, hasil, parse_mode='Markdown')
-            except Exception: bot.send_message(call.message.chat.id, strip_markdown(hasil))
+            try: await callback.message.answer(hasil, parse_mode="HTML")
+            except Exception: await callback.message.answer(strip_markdown(hasil))
         else:
-            bot.send_message(call.message.chat.id, "❌ AI error. Coba lagi.")
+            await callback.message.answer("❌ AI error. Coba lagi.")
             
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add(types.InlineKeyboardButton("📝 Log Latihan", callback_data="gym_log_info"), types.InlineKeyboardButton("📊 Profil Saya", callback_data="gym_view_profile"))
-        markup.add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
-        bot.send_message(call.message.chat.id, "👇 Selanjutnya lu bisa:", reply_markup=markup)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📝 Log Latihan", callback_data="gym_log_info")
+        builder.button(text="📊 Profil Saya", callback_data="gym_view_profile")
+        builder.button(text="🔙 Menu Gym", callback_data="menu_gym")
+        builder.adjust(2, 1)
+        await callback.message.answer("👇 Selanjutnya lu bisa:", reply_markup=builder.as_markup())
         
     except Exception as e: logger.error(f"[gym_noob] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "gym_pro_start")
-def callback_gym_pro_start(call):
+@router.callback_query(F.data == "gym_pro_start")
+async def callback_gym_pro_start(callback: CallbackQuery):
     try:
-        set_gym_wizard(call.from_user.id, 'pro', 'input_data')
-        bot.answer_callback_query(call.id, "💪 Mode Pro Gym!")
+        await set_gym_wizard(str(callback.from_user.id), 'pro', 'input_data')
+        await callback.answer("💪 Mode Pro Gym!")
         teks = (
-            "💪 *MODE PRO GYM*\n"
+            "💪 <b>MODE PRO GYM</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             "Kirim data program lu dalam 1 baris:\n\n"
-            "📌 *Format:*\n"
-            "`target | level | pengalaman | frekuensi | alat`\n\n"
-            "📌 *Contoh:*\n"
-            "`cutting | intermediate | 3 | 5 | gym_full`\n\n"
+            "📌 <b>Format:</b>\n"
+            "<code>target | level | pengalaman | frekuensi | alat</code>\n\n"
+            "📌 <b>Contoh:</b>\n"
+            "<code>cutting | intermediate | 3 | 5 | gym_full</code>\n\n"
             "Gass kirim datanya! 👇\n\n"
-            "_Ketik /cancel kalau mau batal_"
+            "<i>Ketik /cancel kalau mau batal</i>"
         )
-        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
-        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown')
+        try: await callback.message.edit_text(teks, parse_mode="HTML")
+        except Exception: await callback.message.answer(teks, parse_mode="HTML")
     except Exception as e: logger.error(f"[gym_pro] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "gym_view_profile")
-def callback_gym_view_profile(call):
+@router.callback_query(F.data == "gym_view_profile")
+async def callback_gym_view_profile(callback: CallbackQuery):
     try:
-        bot.answer_callback_query(call.id)
-        tampil_profil_gym(call.message.chat.id, call.from_user.id, call.message.message_id)
+        await callback.answer()
+        await tampil_profil_gym(callback.message.chat.id, str(callback.from_user.id), callback.message.message_id, callback.bot)
     except Exception as e: logger.error(f"[gym_view_profile] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "gym_log_info")
-def callback_gym_log_info(call):
+@router.callback_query(F.data == "gym_log_info")
+async def callback_gym_log_info(callback: CallbackQuery):
     try:
-        bot.answer_callback_query(call.id)
+        await callback.answer()
         teks = (
-            "📝 *LOG LATIHAN & MAKAN*\n"
+            "📝 <b>LOG LATIHAN & MAKAN</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             "Kirim laporan lu dengan ketik:\n\n"
-            "`/gym [laporan]`\n\n"
-            "*Contoh:*\n"
-            "`/gym hari ini latihan dada, bench 60kg 4x10`\n\n"
+            "<code>/gym [laporan]</code>\n\n"
+            "<b>Contoh:</b>\n"
+            "<code>/gym hari ini latihan dada, bench 60kg 4x10</code>\n\n"
             "AI bakal evaluasi & kasih saran sesuai profil lu. 🔥"
         )
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Menu Gym", callback_data="menu_gym"))
-        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=markup)
-        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=markup)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔙 Menu Gym", callback_data="menu_gym")
+        try: await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception: await callback.message.answer(teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e: logger.error(f"[gym_log_info] error: {e}")

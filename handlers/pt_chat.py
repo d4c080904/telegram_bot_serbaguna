@@ -1,97 +1,94 @@
-from bot_instance import bot
+import logging
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.queries import set_chat_mode, hapus_chat_history
 from services.pt_chat import proses_chat_pt_core
 from utils.helpers import strip_markdown
-from telebot import types
-import logging
 
 logger = logging.getLogger(__name__)
+router = Router()
 
-def masuk_mode_pt(chat_id, user_id, message_id=None):
-    set_chat_mode(user_id, True)
+async def masuk_mode_pt(chat_id, user_id, message_id=None, bot=None):
+    await set_chat_mode(user_id, True)
     teks = (
-        "💬 *MODE CHAT PT AI AKTIF*\n"
+        "💬 <b>MODE CHAT PT AI AKTIF</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         "Sekarang lu bisa tanya apa aja seputar gym, latihan, nutrisi, atau minta saran program ke PT AI gw.\n\n"
-        "_Contoh: 'Bro, bikin program latihan 3 hari buat pemula dong'_\n\n"
-        "👇 *Silakan ketik pertanyaan lu langsung di chat!*"
+        "<i>Contoh: 'Bro, bikin program latihan 3 hari buat pemula dong'</i>\n\n"
+        "👇 <b>Silakan ketik pertanyaan lu langsung di chat!</b>"
     )
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("🧹 Reset History", callback_data="pt_reset"),
-        types.InlineKeyboardButton("🔚 Keluar Chat", callback_data="pt_exit")
-    )
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🧹 Reset History", callback_data="pt_reset")
+    builder.button(text="🔚 Keluar Chat", callback_data="pt_exit")
+    builder.adjust(2)
     
     try:
         if message_id:
-            bot.edit_message_text(teks, chat_id, message_id, parse_mode='Markdown', reply_markup=markup)
+            await bot.edit_message_text(teks, chat_id=chat_id, message_id=message_id, parse_mode="HTML", reply_markup=builder.as_markup())
         else:
-            bot.send_message(chat_id, teks, parse_mode='Markdown', reply_markup=markup)
+            await bot.send_message(chat_id, teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e:
         logger.error(f"masuk_mode_pt error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "menu_chat_pt")
-def callback_menu_chat_pt(call):
+@router.callback_query(F.data == "menu_chat_pt")
+async def callback_menu_chat_pt(callback: CallbackQuery):
     try:
-        bot.answer_callback_query(call.id, "💬 PT AI siap mendengarkan!")
-        masuk_mode_pt(call.message.chat.id, call.from_user.id, call.message.message_id)
+        await callback.answer("💬 PT AI siap mendengarkan!")
+        await masuk_mode_pt(callback.message.chat.id, str(callback.from_user.id), callback.message.message_id, callback.bot)
     except Exception as e: logger.error(f"[menu_chat_pt] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "pt_exit")
-def callback_pt_exit(call):
+@router.callback_query(F.data == "pt_exit")
+async def callback_pt_exit(callback: CallbackQuery):
     try:
-        set_chat_mode(call.from_user.id, False)
-        try: bot.answer_callback_query(call.id, "✅ Keluar dari Chat PT")
-        except Exception: pass
+        await set_chat_mode(str(callback.from_user.id), False)
+        await callback.answer("✅ Keluar dari Chat PT")
         
-        teks = "👋 *Keluar dari Chat PT.*\n\nBalik ke menu utama? Pencet tombol di bawah 👇"
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama"))
+        teks = "👋 <b>Keluar dari Chat PT.</b>\n\nBalik ke menu utama? Pencet tombol di bawah 👇"
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🏠 Menu Utama", callback_data="menu_utama")
         
-        try: bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=markup)
-        except Exception: bot.send_message(call.message.chat.id, teks, parse_mode='Markdown', reply_markup=markup)
+        try: 
+            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception: 
+            await callback.message.answer(teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e: logger.error(f"[pt_exit] error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "pt_reset")
-def callback_pt_reset(call):
+@router.callback_query(F.data == "pt_reset")
+async def callback_pt_reset(callback: CallbackQuery):
     try:
-        hapus_chat_history(call.from_user.id)
-        try: bot.answer_callback_query(call.id, "🧹 History chat PT dihapus!")
-        except Exception: pass
-        masuk_mode_pt(call.message.chat.id, call.from_user.id, call.message.message_id)
+        await hapus_chat_history(str(callback.from_user.id))
+        await callback.answer("🧹 History chat PT dihapus!")
+        await masuk_mode_pt(callback.message.chat.id, str(callback.from_user.id), callback.message.message_id, callback.bot)
     except Exception as e: logger.error(f"[pt_reset] error: {e}")
 
-def proses_chat_pt(pesan):
-    user_id = str(pesan.from_user.id)
-    teks = pesan.text.strip()
+async def proses_chat_pt(message: Message):
+    user_id = str(message.from_user.id)
+    teks = message.text.strip()
     
-    bot.send_chat_action(pesan.chat.id, 'typing')
-    pesan_tunggu = bot.reply_to(pesan, "💭 _PT AI lagi mikir..._", parse_mode="Markdown")
+    await message.bot.send_chat_action(message.chat.id, 'typing')
+    pesan_tunggu = await message.reply("💭 <i>PT AI lagi mikir...</i>", parse_mode="HTML")
     
-    # Panggil Logic Bisnis (Service)
-    result = proses_chat_pt_core(user_id=user_id, teks=teks)
+    result = await proses_chat_pt_core(user_id=user_id, teks=teks)
     
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("🔚 Keluar Chat", callback_data="pt_exit"),
-        types.InlineKeyboardButton("🏠 Menu", callback_data="menu_utama")
-    )
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔚 Keluar Chat", callback_data="pt_exit")
+    builder.button(text="🏠 Menu", callback_data="menu_utama")
+    builder.adjust(2)
     
-    # Handle Hasil Response Service
     if result["status"] == "ai_failed":
-        bot.edit_message_text("❌ PT AI-nya lagi error nih bro. Coba lagi bentar ya.", pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
+        await pesan_tunggu.edit_text("❌ PT AI-nya lagi error nih bro. Coba lagi bentar ya.", reply_markup=builder.as_markup())
         return
         
     if result["status"] == "error":
-        bot.edit_message_text("❌ Terjadi kesalahan sistem. Coba lagi ya.", pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
+        await pesan_tunggu.edit_text("❌ Terjadi kesalahan sistem. Coba lagi ya.", reply_markup=builder.as_markup())
         return
         
-    # JIKA SUKSES
     balasan = result["data"]
     try:
-        bot.edit_message_text(balasan, pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown', reply_markup=markup)
+        await pesan_tunggu.edit_text(balasan, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception:
-        # Fallback kalau Markdown bikin error
         try:
-            bot.edit_message_text(strip_markdown(balasan), pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
+            await pesan_tunggu.edit_text(strip_markdown(balasan), reply_markup=builder.as_markup())
         except Exception:
-            bot.reply_to(pesan, strip_markdown(balasan)[:4000], reply_markup=markup)
+            await message.answer(strip_markdown(balasan)[:4000], reply_markup=builder.as_markup())

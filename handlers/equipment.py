@@ -1,62 +1,66 @@
 import logging
-from bot_instance import bot
-from telebot import types
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from services.equipment import proses_foto_alat_core
-from utils.decorators import rate_limited
 from database.queries import save_wizard_state, delete_wizard_state
 
 logger = logging.getLogger(__name__)
+router = Router()
 
-@bot.callback_query_handler(func=lambda call: call.data == "menu_scan_alat")
-def callback_scan_alat(call):
+@router.callback_query(F.data == "menu_scan_alat")
+async def callback_scan_alat(callback: CallbackQuery):
     try:
-        bot.answer_callback_query(call.id)
-        save_wizard_state(str(call.from_user.id), "waiting_equipment_photo", "waiting", {})
+        await callback.answer()
+        await save_wizard_state(str(callback.from_user.id), "waiting_equipment_photo", "waiting", {})
         
         teks = (
-            "🔍 *SCAN ALAT GYM*\n"
+            "🔍 <b>SCAN ALAT GYM</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             "Silakan kirim foto alat gym yang mau lu pake. "
             "Gw bakal kasih tau nama alat, otot yang dilatih, dan cara pakenya yang bener."
         )
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("❌ Batal", callback_data="menu_gym_mode"))
-        bot.edit_message_text(teks, call.message.chat.id, call.message.message_id, parse_mode='Markdown', reply_markup=markup)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="❌ Batal", callback_data="menu_gym_mode")
+        try:
+            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception:
+            await callback.message.answer(teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e: 
         logger.error(f"scan_alat error: {e}")
 
-def proses_foto_alat(pesan):
-    user_id = str(pesan.from_user.id)
-    delete_wizard_state(user_id, "waiting_equipment_photo")
+async def proses_foto_alat(message: Message):
+    user_id = str(message.from_user.id)
+    await delete_wizard_state(user_id, "waiting_equipment_photo")
     
-    bot.send_chat_action(pesan.chat.id, 'typing')
-    pesan_tunggu = bot.reply_to(pesan, "⏳ _AI lagi ngenalin alat gym lu..._")
+    await message.bot.send_chat_action(message.chat.id, 'typing')
+    pesan_tunggu = await message.reply("⏳ <i>AI lagi ngenalin alat gym lu...</i>", parse_mode="HTML")
     
     try:
-        file_info = bot.get_file(pesan.photo[-1].file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
+        file_id = message.photo[-1].file_id
+        file_info = await message.bot.get_file(file_id)
+        downloaded_file = await message.bot.download_file(file_info.file_path)
+        image_bytes = downloaded_file.read()
         
-        # Panggil Logic Bisnis (Service)
-        result = proses_foto_alat_core(image_bytes=downloaded_file)
+        result = await proses_foto_alat_core(image_bytes=image_bytes)
         
-        # Handle Hasil Response Service
         if result["status"] == "ai_failed":
-            bot.edit_message_text("❌ AI gagal ngenalin alatnya. Coba foto dari sudut yang lebih jelas.", pesan.chat.id, pesan_tunggu.message_id)
+            await pesan_tunggu.edit_text("❌ AI gagal ngenalin alatnya. Coba foto dari sudut yang lebih jelas.")
             return
             
         if result["status"] == "error":
-            bot.edit_message_text("❌ Terjadi kesalahan sistem saat memproses foto.", pesan.chat.id, pesan_tunggu.message_id)
+            await pesan_tunggu.edit_text("❌ Terjadi kesalahan sistem saat memproses foto.")
             return
             
-        # JIKA SUKSES
         hasil = result["data"]
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode"))
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode")
         
         try:
-            bot.edit_message_text(hasil, pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown', reply_markup=markup)
+            await pesan_tunggu.edit_text(hasil, reply_markup=builder.as_markup())
         except Exception:
-            # Fallback kalau format teks dari AI bikin error Markdown
-            bot.edit_message_text(hasil, pesan.chat.id, pesan_tunggu.message_id, reply_markup=markup)
+            await pesan_tunggu.edit_text(hasil, reply_markup=builder.as_markup())
             
     except Exception as e:
         logger.error(f"proses_foto_alat error: {e}")
-        bot.edit_message_text("❌ Terjadi kesalahan saat memproses foto.", pesan.chat.id, pesan_tunggu.message_id)
+        await pesan_tunggu.edit_text("❌ Terjadi kesalahan saat memproses foto.")

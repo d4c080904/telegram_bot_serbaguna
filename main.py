@@ -7,6 +7,12 @@ from database.db import create_pool, setup_db, close_pool
 
 # IMPORT ROUTER
 from handlers import start as start_router
+from handlers import calorie as calorie_router
+from handlers import pt_chat as pt_chat_router
+from handlers import gym as gym_router
+from handlers import equipment as equipment_router
+from handlers import router as main_router 
+from services.ai import init_models
 
 # Setup Logging
 logging.basicConfig(
@@ -33,11 +39,18 @@ async def main():
     
     await create_pool()
     await setup_db()
+    await init_models()
     await set_bot_commands(bot)
     
-    # DAFTARIN ROUTER DI SINI
+    # DAFTARIN ROUTER (URUTAN SANGAT PENTING!)
     dp.include_router(start_router.router)
-    logger.info("✅ Router Start berhasil didaftarkan.")
+    dp.include_router(calorie_router.router)
+    dp.include_router(pt_chat_router.router)
+    dp.include_router(gym_router.router)
+    dp.include_router(equipment_router.router)
+    dp.include_router(main_router.router) # Penjaga gerbang harus paling akhir
+    
+    logger.info("✅ Semua Router berhasil didaftarkan.")
     
     logger.info("✅ Bot berhasil jalan! (Mode Async)")
     try:
