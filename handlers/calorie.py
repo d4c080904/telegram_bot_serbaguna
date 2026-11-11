@@ -10,6 +10,7 @@ from database.queries import (
 )
 from utils.helpers import hitung_bmr_tdee
 from services.meal_tracker import proses_foto_makanan_core
+from services.adaptive_tdee import hitung_adaptive_tdee
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -32,7 +33,14 @@ async def tampil_dashboard_kalori(chat_id, user_id, message_id=None, bot=None):
         return
 
     target = profil['target'] or 'recomp'
-    batas_kalori = hitung_bmr_tdee(profil['umur'], profil['berat'], profil['tinggi'], profil['jenis_kelamin'] or 'L', target, profil['frekuensi'] or 3)
+    
+    # --- 1. HITUNG TARGET DASAR (STATIS) ---
+    batas_kalori_statis = hitung_bmr_tdee(profil['umur'], profil['berat'], profil['tinggi'], profil['jenis_kelamin'] or 'L', target, profil['frekuensi'] or 3)
+    
+    # --- 2. HITUNG TARGET DINAMIS (ADAPTIVE TDEE) ---
+    batas_kalori, alasan_tdee = await hitung_adaptive_tdee(user_id, batas_kalori_statis, target, profil['berat'])
+    # -------------------------------------------
+    
     batas_gula = 25 if target == 'cutting' else 50
     
     masuk_kalori, masuk_gula = await get_total_makro_hari_ini(user_id)
@@ -49,10 +57,15 @@ async def tampil_dashboard_kalori(chat_id, user_id, message_id=None, bot=None):
     
     icon_gula = "✅" if sisa_gula >= 0 else "🚨"
     
+    info_tdee = ""
+    if "Stagnan" in alasan_tdee or "naikkan" in alasan_tdee or "kurangi" in alasan_tdee:
+        info_tdee = f"📉 <i>Auto-Adjust: {alasan_tdee}</i>\n"
+
     teks = (
         "🍎 <b>FOOD & SUGAR TRACKER</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"📅 <b>{waktu_str}</b>\n\n"
+        f"📅 <b>{waktu_str}</b>\n"
+        f"{info_tdee}\n"
         f"<b>KALORI</b>\n"
         f"🎯 Batas: {batas_kalori} kcal\n"
         f"🍽️ Masuk: {masuk_kalori} kcal\n"
@@ -66,14 +79,13 @@ async def tampil_dashboard_kalori(chat_id, user_id, message_id=None, bot=None):
     
     builder = InlineKeyboardBuilder()
     builder.button(text="📸 Foto Makanan", callback_data="kalori_foto")
+    builder.button(text="📷 Scan Barcode", callback_data="menu_barcode") # <--- TOMBOL BARU DI SINI
     builder.button(text="📝 Hapus Log Terakhir", callback_data="kalori_hapus")
     builder.button(text="📊 Lihat History", callback_data="kalori_history")
-    
-    # --- INI YANG DIUBAH: LANGSUNG KE MENU UTAMA ---
     builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama")
-    # -----------------------------------------------
     
-    builder.adjust(1, 2, 1)
+    # Atur layout: Foto & Barcode sejajar, Hapus & History sejajar, Kembali sendiri
+    builder.adjust(2, 2, 1) 
     
     try:
         if message_id: 
@@ -137,11 +149,7 @@ async def callback_kalori_history(callback: CallbackQuery):
                 nama = row['nama_makanan']
                 porsi = row['estimasi_porsi']
                 kal = int(row['kalori'])
-                
-                # --- FIX: Bulatkan gula di history ---
                 gula = round(float(row['gula']), 1) if row['gula'] else 0.0
-                # -------------------------------------
-                
                 waktu_db = row['waktu']
                 try:
                     jam_str = waktu_db.strftime('%H:%M')
@@ -182,9 +190,7 @@ async def proses_foto_makanan(message: Message):
         )
         
         builder = InlineKeyboardBuilder()
-        # --- INI YANG DIUBAH: HASIL SCAN LANGSUNG KE MENU UTAMA ---
         builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama") 
-        # ----------------------------------------------------------
         
         if result["status"] == "duplicate":
             await pesan_tunggu.edit_text(
@@ -206,10 +212,7 @@ async def proses_foto_makanan(message: Message):
             return
             
         hasil = result["data"]
-        
-        # --- FIX: Bulatkan gula di pesan sukses ---
         gula_hasil = round(float(hasil.get('gula', 0)), 1)
-        # ------------------------------------------
 
         teks_balasan = (
             f"✅ <b>Berhasil Dicatat!</b>\n\n"

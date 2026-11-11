@@ -14,7 +14,8 @@ from handlers import equipment as equipment_router
 from handlers import progress as progress_router
 from handlers import meal_planner as meal_router
 from handlers import export as export_router 
-from handlers import voice as voice_router # <--- IMPORT ROUTER VOICE
+from handlers import voice as voice_router
+from handlers import barcode as barcode_router # <--- IMPORT BARU UNTUK BARCODE
 from handlers import router as main_router 
 from services.ai import init_models
 
@@ -55,7 +56,8 @@ async def main():
     dp.include_router(progress_router.router)
     dp.include_router(meal_router.router)
     dp.include_router(export_router.router)
-    dp.include_router(voice_router.router) # <--- DAFTARIN DI SINI
+    dp.include_router(voice_router.router)
+    dp.include_router(barcode_router.router) # <--- DAFTARIN DI SINI
     dp.include_router(main_router.router) 
     
     logger.info("✅ Semua Router berhasil didaftarkan.")

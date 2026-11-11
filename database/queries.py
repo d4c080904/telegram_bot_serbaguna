@@ -263,3 +263,19 @@ async def delete_wizard_state(user_id, state_type):
             await conn.execute("DELETE FROM wizard_states WHERE user_id = $1 AND state_type = $2", str(user_id), state_type)
             return True
     except Exception as e: logger.error(f"delete_wizard_state error: {e}"); return False
+
+# --- FUNGSI BARU UNTUK ADAPTIVE TDEE ---
+async def get_berat_14_hari_terakhir(user_id):
+    try:
+        async with await get_db() as conn:
+            # Ambil berat badan unik per tanggal, urutin dari yang terlama
+            rows = await conn.fetch('''
+                SELECT tanggal, berat FROM weight_logs 
+                WHERE user_id = $1 AND tanggal >= CURRENT_DATE - INTERVAL '14 days'
+                GROUP BY tanggal, berat
+                ORDER BY tanggal ASC
+            ''', str(user_id))
+            return rows
+    except Exception as e: 
+        logger.error(f"get_berat_14_hari_terakhir error: {e}")
+        return []

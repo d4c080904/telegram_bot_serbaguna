@@ -9,7 +9,7 @@ def buat_menu_utama():
     builder.button(text="💬 Chat PT AI", callback_data="menu_chat_pt")
     builder.button(text="🔍 Scan Alat Gym", callback_data="menu_scan_alat")
     builder.button(text="🍳 Meal Planner", callback_data="menu_meal_planner")
-    builder.button(text="📄 Laporan PDF", callback_data="menu_export") # <--- FITUR YANG TADI ILANG
+    builder.button(text="📄 Laporan PDF", callback_data="menu_export")
     builder.button(text="📊 Statistik", callback_data="menu_stats")
     builder.button(text="❓ Bantuan", callback_data="menu_help")
     builder.adjust(2) # Diatur 2 kolom biar rapi
