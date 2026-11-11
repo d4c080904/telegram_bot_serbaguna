@@ -2,6 +2,7 @@ import logging
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.queries import get_gym_profile, save_gym_profile
@@ -37,7 +38,7 @@ async def tampil_menu_gym(chat_id, user_id, message_id=None, bot=None):
     builder.button(text="💪 Mode Pro Gym", callback_data="gym_pro_start")
     builder.button(text="📊 Profil Saya", callback_data="gym_view_profile")
     builder.button(text="📝 Log Latihan", callback_data="gym_log_info")
-    builder.button(text="🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode")
+    builder.button(text="🔙 Kembali ke MENU UTAMA", callback_data="menu_utama")
     builder.adjust(2, 2, 1)
     
     try:
@@ -48,13 +49,23 @@ async def tampil_menu_gym(chat_id, user_id, message_id=None, bot=None):
     except Exception as e:
         logger.error(f"tampil_menu_gym error: {e}")
 
+# --- TAMBAHAN: HANDLER BUAT BALIK KE GYM MODE ---
+@router.callback_query(F.data == "menu_gym_mode")
+async def callback_menu_gym_mode(callback: CallbackQuery, state: FSMContext):
+    try:
+        await state.clear() # Bersihin state kalo ada yang nyangkut
+        await callback.answer()
+        await tampil_menu_gym(callback.message.chat.id, str(callback.from_user.id), callback.message.message_id, callback.bot)
+    except Exception as e:
+        logger.error(f"[menu_gym_mode] error: {e}")
+
 async def tampil_profil_gym(chat_id, user_id, message_id=None, bot=None):
     profil = await get_gym_profile(user_id)
     
     if not profil:
         teks = "⚠️ <b>Lu belum punya profil Gym.</b>\n\nIsi profil dulu di menu awal ya."
         builder = InlineKeyboardBuilder()
-        builder.button(text="🔙 Kembali", callback_data="menu_gym")
+        builder.button(text="🔙 Kembali", callback_data="menu_gym_mode")
         try:
             if message_id: await bot.edit_message_text(teks, chat_id=chat_id, message_id=message_id, parse_mode="HTML", reply_markup=builder.as_markup())
             else: await bot.send_message(chat_id, teks, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -87,7 +98,7 @@ async def tampil_profil_gym(chat_id, user_id, message_id=None, bot=None):
     builder = InlineKeyboardBuilder()
     builder.button(text="🔄 Daftar Ulang", callback_data=f"gym_{profil.get('mode')}_start")
     builder.button(text="📝 Log Latihan", callback_data="gym_log_info")
-    builder.button(text="🔙 Menu Gym", callback_data="menu_gym")
+    builder.button(text="🔙 Menu Gym", callback_data="menu_gym_mode")
     builder.adjust(2, 1)
     
     try:
@@ -155,7 +166,7 @@ async def handler_gym(message: Message):
                 continue
                 
         if hasil:
-            try: await pesan_tunggu.edit_text(hasil, parse_mode="HTML")
+            try: await pesan_tunggu.edit_text(hasil)
             except Exception: await pesan_tunggu.edit_text(strip_markdown(hasil))
         else:
             await pesan_tunggu.edit_text("❌ AI lagi error nih bro. Coba lagi bentar ya.")
@@ -213,7 +224,7 @@ async def proses_gym_wizard(message: Message, wizard: dict):
         builder = InlineKeyboardBuilder()
         builder.button(text="📝 Log Latihan", callback_data="gym_log_info")
         builder.button(text="📊 Profil Saya", callback_data="gym_view_profile")
-        builder.button(text="🔙 Menu Gym", callback_data="menu_gym")
+        builder.button(text="🔙 Menu Gym", callback_data="menu_gym_mode")
         builder.adjust(2, 1)
         await message.answer("👇 Selanjutnya lu bisa:", reply_markup=builder.as_markup())
         return
@@ -253,7 +264,7 @@ async def callback_gym_noob_start(callback: CallbackQuery):
         builder = InlineKeyboardBuilder()
         builder.button(text="📝 Log Latihan", callback_data="gym_log_info")
         builder.button(text="📊 Profil Saya", callback_data="gym_view_profile")
-        builder.button(text="🔙 Menu Gym", callback_data="menu_gym")
+        builder.button(text="🔙 Menu Gym", callback_data="menu_gym_mode")
         builder.adjust(2, 1)
         await callback.message.answer("👇 Selanjutnya lu bisa:", reply_markup=builder.as_markup())
         
@@ -300,7 +311,7 @@ async def callback_gym_log_info(callback: CallbackQuery):
             "AI bakal evaluasi & kasih saran sesuai profil lu. 🔥"
         )
         builder = InlineKeyboardBuilder()
-        builder.button(text="🔙 Menu Gym", callback_data="menu_gym")
+        builder.button(text="🔙 Menu Gym", callback_data="menu_gym_mode")
         try: await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=builder.as_markup())
         except Exception: await callback.message.answer(teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e: logger.error(f"[gym_log_info] error: {e}")

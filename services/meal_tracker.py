@@ -5,19 +5,20 @@ from services.ai import analisis_foto_makanan, koreksi_foto_makanan
 
 logger = logging.getLogger(__name__)
 
-def proses_foto_makanan_core(user_id: str, image_bytes: bytes, caption: str, message_id: int, photo_message_id: int) -> dict:
-    """Fungsi murni untuk memproses foto makanan."""
+async def proses_foto_makanan_core(user_id: str, image_bytes: bytes, caption: str, message_id: int, photo_message_id: int) -> dict:
     try:
         photo_hash = hashlib.md5(image_bytes).hexdigest()
         
-        if cek_duplikat_foto(user_id, photo_hash):
+        # FIX: Tambahin await
+        if await cek_duplikat_foto(user_id, photo_hash):
             return {"status": "duplicate"}
             
-        hasil = analisis_foto_makanan(image_bytes, caption)
+        hasil = await analisis_foto_makanan(image_bytes, caption)
         if not hasil:
             return {"status": "ai_failed"}
             
-        berhasil = tambah_food_log(
+        # FIX: Tambahin await
+        berhasil = await tambah_food_log(
             user_id, message_id, photo_message_id, photo_hash, 
             hasil.get('nama_makanan', 'Makanan'), hasil.get('estimasi_porsi', '1 porsi'), 
             hasil.get('kalori', 0), hasil.get('protein', 0), hasil.get('karbo', 0), 
@@ -33,16 +34,14 @@ def proses_foto_makanan_core(user_id: str, image_bytes: bytes, caption: str, mes
         logger.error(f"proses_foto_makanan_core error: {e}")
         return {"status": "error", "message": str(e)}
 
-def proses_koreksi_makanan_core(user_id: str, reply_msg_id: int, teks_koreksi: str) -> dict:
-    """Fungsi murni untuk memproses koreksi makanan via teks."""
+async def proses_koreksi_makanan_core(user_id: str, reply_msg_id: int, teks_koreksi: str) -> dict:
     try:
-        # 1. Panggil AI
-        hasil_baru = koreksi_foto_makanan(teks_koreksi)
+        hasil_baru = await koreksi_foto_makanan(teks_koreksi)
         if not hasil_baru:
             return {"status": "ai_failed"}
             
-        # 2. Update DB
-        berhasil = update_food_log(
+        # FIX: Tambahin await
+        berhasil = await update_food_log(
             user_id, reply_msg_id,
             hasil_baru.get('nama_makanan', 'Makanan'), hasil_baru.get('estimasi_porsi', '1 porsi'), 
             hasil_baru.get('kalori', 0), hasil_baru.get('protein', 0), 

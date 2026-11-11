@@ -17,25 +17,30 @@ async def respon_pesan(message: Message):
         teks_asli = message.text.strip()
         user_id = str(message.from_user.id)
 
-        # 1. CEK ONBOARDING
+        # 1. JIKA USER KIRIM COMMAND (/start, /gym, dll), ABAIKAN DI SINI
+        # Biar gak tabrakan sama router command di file lain
+        if teks_asli.startswith('/'):
+            return
+
+        # 2. CEK ONBOARDING
         onboarding = await get_onboarding_wizard(user_id)
         if onboarding:
             await proses_onboarding(message, onboarding)
             return
 
-        # 2. CEK GYM WIZARD (Sekarang udah aman pakai aiogram)
+        # 3. CEK GYM WIZARD
         wizard = await get_gym_wizard(user_id)
         if wizard:
             from handlers.gym import proses_gym_wizard
             await proses_gym_wizard(message, wizard)
             return
 
-        # 3. CEK MODE CHAT PT AI
-        if await is_chat_mode(user_id) and not teks_asli.startswith('/'):
+        # 4. CEK MODE CHAT PT AI
+        if await is_chat_mode(user_id):
             await proses_chat_pt(message)
             return
 
-        # 4. FITUR KOREKSI KALORI
+        # 5. FITUR KOREKSI KALORI
         if message.reply_to_message:
             if await cek_id_makanan(user_id, message.reply_to_message.message_id):
                 await message.bot.send_chat_action(message.chat.id, 'typing')
@@ -66,10 +71,7 @@ async def respon_pesan(message: Message):
                     await message.reply("⚠️ <b>Pesan yang lu reply itu Dashboard, bukan detail makanannya.</b>\n\nBiar bisa dikoreksi, tolong reply pesan <b>Foto Makanan</b> atau <b>✅ Berhasil Dicatat!</b> ya.", parse_mode="HTML")
                     return
 
-        # 5. JIKA USER KIRIM TEKS SEMBARANG
-        if teks_asli.startswith('/'):
-            return
-            
+        # 6. TEKS SEMBARANG
         await message.answer(
             "🤖 <b>Gw sekarang fokus jadi GymBot bro!</b>\n\n"
             "Kalau lu mau nyatet makanan, pake tombol <b>🍎 Kalori & Gula</b> di menu.\n"

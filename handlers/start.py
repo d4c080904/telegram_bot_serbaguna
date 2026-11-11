@@ -1,14 +1,14 @@
 import logging
-from aiogram import Router, F, types
+from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
 
 from keyboards.menus import (
     buat_menu_utama, teks_menu_utama, 
     tombol_kembali, buat_tombol_gender
 )
-# from utils.decorators import rate_limited # (Sementara dimatikan dulu, nanti kita benerin decoratornya)
-from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard
+from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard, clear_gym_wizard
 from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode
 from database.db import get_db
 
@@ -28,27 +28,29 @@ async def buat_ringkasan_dashboard(user_id):
     berat_str = f"{berat_data[0]['berat']} kg" if berat_data else "Belum diisi"
     
     return (
-        "📊 *RINGKASAN HARI INI:*\n"
+        "📊 <b>RINGKASAN HARI INI:</b>\n"
         f"💧 Air: {bar} {int(persen)}% ({air}/{target_air} ml)\n"
         f"⚖️ Berat: {berat_str}\n"
     )
 
 @router.message(Command("start", "help", "menu"))
-async def kirim_sambutan(message: Message):
+async def kirim_sambutan(message: Message, state: FSMContext):
     try:
+        await state.clear() # <--- KUNCI: Bersihin state nyangkut
         user_id = str(message.from_user.id)
         await set_chat_mode(user_id, False)
+        await clear_gym_wizard(user_id) # <--- Bersihin wizard gym
         
         user = await get_user_profile(user_id)
         
         if not user:
             await set_onboarding_wizard(user_id, 'nama', {})
-            await message.answer("Halo bro! 👋 Sebelum mulai, kenalin diri lu dulu ya.\n\nSiapa **nama panggilan** lu?", parse_mode="Markdown")
+            await message.answer("Halo bro! 👋 Sebelum mulai, kenalin diri lu dulu ya.\n\nSiapa <b>nama panggilan</b> lu?", parse_mode="HTML")
             return
             
         ringkasan = await buat_ringkasan_dashboard(user_id)
-        teks = f"Halo *{user['nama']}*! 👋\n\n" + teks_menu_utama(ringkasan)
-        await message.answer(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
+        teks = f"Halo <b>{user['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
+        await message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
     except Exception as e:
         logger.error(f"[start] error: {e}")
 
@@ -61,7 +63,7 @@ async def proses_onboarding(message: Message, wizard: dict):
     if step == 'nama':
         data['nama'] = teks
         await set_onboarding_wizard(user_id, 'umur', data)
-        await message.answer(f"Oke *{teks}*! Umur lu berapa tahun? (Ketik angka aja)", parse_mode="Markdown")
+        await message.answer(f"Oke <b>{teks}</b>! Umur lu berapa tahun? (Ketik angka aja)", parse_mode="HTML")
     elif step == 'umur':
         try:
             umur = int(teks)
@@ -108,33 +110,35 @@ async def callback_gender(callback: CallbackQuery):
         await clear_onboarding_wizard(user_id)
         
         ringkasan = await buat_ringkasan_dashboard(user_id)
-        teks = f"✅ Mantap! Data lu udah disimpen.\n\nHalo *{data['nama']}*! 👋\n\n" + teks_menu_utama(ringkasan)
+        teks = f"✅ Mantap! Data lu udah disimpen.\n\nHalo <b>{data['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try:
-            await callback.message.edit_text(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
+            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
         except Exception:
-            await callback.message.answer(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
+            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
             
     except Exception as e:
         logger.error(f"[callback_gender] error: {e}")
 
 @router.callback_query(F.data == "menu_utama")
-async def callback_menu_utama(callback: CallbackQuery):
+async def callback_menu_utama(callback: CallbackQuery, state: FSMContext):
     try:
+        await state.clear() # <--- KUNCI: Bersihin state nyangkut
         await callback.answer()
         user_id = str(callback.from_user.id)
         await set_chat_mode(user_id, False)
+        await clear_gym_wizard(user_id)
         
         user = await get_user_profile(user_id)
         nama = user['nama'] if user else "Bro"
         
         ringkasan = await buat_ringkasan_dashboard(user_id)
-        teks = f"Halo *{nama}*! 👋\n\n" + teks_menu_utama(ringkasan)
+        teks = f"Halo <b>{nama}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try: 
-            await callback.message.edit_text(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
+            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
         except Exception: 
-            await callback.message.answer(teks, parse_mode="Markdown", reply_markup=buat_menu_utama())
+            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
     except Exception as e:
         logger.error(f"[menu_utama] error: {e}")
 
@@ -149,15 +153,15 @@ async def callback_menu_stats(callback: CallbackQuery):
 
         await callback.answer()
         teks = (
-            "📊 *STATISTIK GYM LU*\n"
+            "📊 <b>STATISTIK GYM LU</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🍎 Log Makanan: *{jumlah_makan} kali*\n"
-            f"💧 Log Air Minum: *{jumlah_air} kali*\n"
-            f"💪 Log Latihan: *{jumlah_gym} kali*\n\n"
-            "_Terus pakai bot ini biar badan makin gede!_ 🚀"
+            f"🍎 Log Makanan: <b>{jumlah_makan} kali</b>\n"
+            f"💧 Log Air Minum: <b>{jumlah_air} kali</b>\n"
+            f"💪 Log Latihan: <b>{jumlah_gym} kali</b>\n\n"
+            "<i>Terus pakai bot ini biar badan makin gede!</i> 🚀"
         )
-        try: await callback.message.edit_text(teks, parse_mode="Markdown", reply_markup=tombol_kembali())
-        except Exception: await callback.message.answer(teks, parse_mode="Markdown", reply_markup=tombol_kembali())
+        try: await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=tombol_kembali())
+        except Exception: await callback.message.answer(teks, parse_mode="HTML", reply_markup=tombol_kembali())
     except Exception as e: logger.error(f"[menu_stats] error: {e}")
 
 @router.callback_query(F.data == "menu_help")
@@ -165,20 +169,19 @@ async def callback_menu_help(callback: CallbackQuery):
     try:
         await callback.answer()
         teks = (
-            "❓ *BANTUAN & PANDUAN GYMBOT*\n"
+            "❓ <b>BANTUAN & PANDUAN GYMBOT</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "*🍎 Kalori & Gula*\n→ Foto makanan buat hitung kalori otomatis.\n→ Bisa reply pesan hasil foto buat koreksi porsi.\n\n"
-            "*💧 Progress & Air*\n→ Catat minum air & berat badan harian.\n\n"
-            "*💪 Program Gym*\n→ Bikin program latihan (Noob/Pro).\n→ Catat log latihan harian.\n\n"
-            "*💬 Chat PT AI*\n→ Tanya jawab seputar gym & nutrisi layaknya punya PT pribadi.\n\n"
-            "*🔍 Scan Alat*\n→ Foto alat gym buat tau cara pakenya.\n\n"
-            "*🍳 Meal Planner*\n→ Rekomendasi resep sesuai sisa kalori lu.\n\n"
-            "*🎙️ Voice Note (Pesan Suara)*\n→ Kirim VN buat nyatet makanan atau latihan otomatis!\n\n"
-            "*⚙️ Command Lain:*\n"
-            "`/start` — Buka menu utama\n"
-            "`/gym` — Langsung ke menu program gym\n"
-            "`/cancel` — Batalin input yang lagi jalan"
+            "<b>🍎 Kalori & Gula</b>\n→ Foto makanan buat hitung kalori otomatis.\n→ Bisa reply pesan hasil foto buat koreksi porsi.\n\n"
+            "<b>💧 Progress & Air</b>\n→ Catat minum air & berat badan harian.\n\n"
+            "<b>💪 Program Gym</b>\n→ Bikin program latihan (Noob/Pro).\n→ Catat log latihan harian.\n\n"
+            "<b>💬 Chat PT AI</b>\n→ Tanya jawab seputar gym & nutrisi layaknya punya PT pribadi.\n\n"
+            "<b>🔍 Scan Alat</b>\n→ Foto alat gym buat tau cara pakenya.\n\n"
+            "<b>🍳 Meal Planner</b>\n→ Rekomendasi resep sesuai sisa kalori lu.\n\n"
+            "<b>⚙️ Command Lain:</b>\n"
+            "<code>/start</code> — Buka menu utama\n"
+            "<code>/gym</code> — Langsung ke menu program gym\n"
+            "<code>/cancel</code> — Batalin input yang lagi jalan"
         )
-        try: await callback.message.edit_text(teks, parse_mode="Markdown", reply_markup=tombol_kembali())
-        except Exception: await callback.message.answer(teks, parse_mode="Markdown", reply_markup=tombol_kembali())
+        try: await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=tombol_kembali())
+        except Exception: await callback.message.answer(teks, parse_mode="HTML", reply_markup=tombol_kembali())
     except Exception as e: logger.error(f"[menu_help] error: {e}")

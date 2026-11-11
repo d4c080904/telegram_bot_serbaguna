@@ -10,18 +10,23 @@ from utils.helpers import hitung_bmi, kategori_bmi
 logger = logging.getLogger(__name__)
 
 MODEL_GROQ_LIST = []
+# Model Vision yang beneran aktif di Groq saat ini
 MODEL_VISION_LIST = [
     "qwen/qwen3.8-27b",
-    "llama-3.2-11b-vision-preview"
+    "meta-llama/llama-4-scout-17b-16e-instruct"
 ]
 
 async def init_models():
     global MODEL_GROQ_LIST
     print("Mengecek daftar model Groq...")
     try:
-        # FIX: Hapus 'await' karena library Groq ngembaliin list secara sync
-        daftar_model = groq_client.models.list()
+        # FIX: AsyncGroq models.list() itu coroutine, wajib pakai await
+        daftar_model = await groq_client.models.list()
         semua_model = [m.id for m in daftar_model.data if "whisper" not in m.id and "guard" not in m.id and "orpheus" not in m.id and "tts" not in m.id]
+        
+        # Model text terbaru pengganti llama-3.1/3.3
+        fallback_models = ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
+        
         MODEL_GROQ_LIST = []
         for prioritas in PRIORITAS_MODEL:
             if prioritas in semua_model:
@@ -30,20 +35,20 @@ async def init_models():
         MODEL_GROQ_LIST.extend(semua_model)
         
         if not MODEL_GROQ_LIST:
-            MODEL_GROQ_LIST = ["llama-3.1-8b-instant"]
+            MODEL_GROQ_LIST = fallback_models
             
         logger.info(f"✅ {len(MODEL_GROQ_LIST)} model Groq siap")
         logger.info(f"🥇 Model utama: {MODEL_GROQ_LIST[0]}")
     except Exception as e:
         logger.warning(f"Gagal ambil model Groq: {e}")
-        MODEL_GROQ_LIST = ["llama-3.1-8b-instant"]
+        MODEL_GROQ_LIST = ["openai/gpt-oss-20b"]
 
-# --- FUNGSI GYM & FITNESS ---
 async def analisis_gym_noob(umur, berat, tinggi):
     bmi = hitung_bmi(berat, tinggi); kategori = kategori_bmi(bmi)
     system_prompt = "Kamu adalah personal trainer berpengalaman yang ramah. Klien kamu BARU MULAI gym, jelaskan sederhana & gaul. WAJIB pakai bahasa Indonesia (bukan Melayu). JANGAN pakai markdown, tulis teks polos. JANGAN mengulang kata yang sama berkali-kali. Berhenti jika sudah selesai."
     user_prompt = f"Data Klien: {umur}th, {berat}kg, {tinggi}cm, BMI: {bmi} ({kategori}). Kasih panduan: 1. Ringkasan kondisi. 2. Program minggu 1. 3. Tips makan. 4. 3 kesalahan pemula. 5. Motivasi. Max 500 kata."
-    for model_name in MODEL_GROQ_LIST:
+    model_prioritas = MODEL_GROQ_LIST if MODEL_GROQ_LIST else ["openai/gpt-oss-20b"]
+    for model_name in model_prioritas:
         try:
             response = await groq_client.chat.completions.create(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
@@ -51,7 +56,7 @@ async def analisis_gym_noob(umur, berat, tinggi):
             )
             hasil = response.choices[0].message.content.strip()
             if hasil: return hasil
-        except Exception as e: logger.warning(f"Gagal (gym noob): {e}"); continue
+        except Exception as e: logger.warning(f"Gagal (gym noob) {model_name}: {e}"); continue
     return None
 
 async def analisis_gym_pro(data):
@@ -60,7 +65,8 @@ async def analisis_gym_pro(data):
     alat_label = {'gym_full': 'Gym lengkap', 'home_dumbbell': 'Rumahan + dumbbell', 'home_barbell': 'Rumahan + barbell', 'bodyweight': 'Bodyweight only'}.get(data.get('alat'), data.get('alat', 'N/A'))
     system_prompt = "Kamu adalah personal trainer elite. Klien kamu sudah pengalaman, jawab detail teknis advanced. WAJIB pakai bahasa Indonesia gaul (bukan Melayu). JANGAN pakai markdown. JANGAN mengulang kata yang sama berkali-kali. Berhenti jika sudah selesai."
     user_prompt = f"Data Pro: {data.get('umur')}th, {data.get('berat')}kg, {data.get('tinggi')}cm, {gender_label}, BMI: {bmi} ({kategori}), Target: {data.get('target')}, Level: {data.get('level')}, Pengalaman: {data.get('pengalaman')}th, Frekuensi: {data.get('frekuensi')}x/mgg, Alat: {alat_label}. Kasih analisis advanced: 1. Analisis komposisi. 2. Split program. 3. Kalori & makro. 4. Saran periodization. 5. Weak point. 6. Suplemen. Max 700 kata."
-    for model_name in MODEL_GROQ_LIST:
+    model_prioritas = MODEL_GROQ_LIST if MODEL_GROQ_LIST else ["openai/gpt-oss-20b"]
+    for model_name in model_prioritas:
         try:
             response = await groq_client.chat.completions.create(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], 
@@ -68,12 +74,13 @@ async def analisis_gym_pro(data):
             )
             hasil = response.choices[0].message.content.strip()
             if hasil: return hasil
-        except Exception as e: logger.warning(f"Gagal (gym pro): {e}"); continue
+        except Exception as e: logger.warning(f"Gagal (gym pro) {model_name}: {e}"); continue
     return None
 
 async def rekomendasi_makanan(sisa_kalori, sisa_protein, sisa_karbo, sisa_lemak, target_user):
     prompt = f"Kamu adalah Chef & Ahli Gizi. Target: {target_user}. Sisa kalori: {sisa_kalori} kcal. Protein kurang: {sisa_protein}g. Kasih 1 resep yang kalorinya < sisa kalori, tinggi protein, bahan lokal. Teks polos + emoji. Max 150 kata."
-    for model_name in MODEL_GROQ_LIST:
+    model_prioritas = MODEL_GROQ_LIST if MODEL_GROQ_LIST else ["openai/gpt-oss-20b"]
+    for model_name in model_prioritas:
         try:
             response = await groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
@@ -81,10 +88,11 @@ async def rekomendasi_makanan(sisa_kalori, sisa_protein, sisa_karbo, sisa_lemak,
             )
             hasil = response.choices[0].message.content.strip()
             if hasil: return hasil
-        except Exception: continue
+        except Exception as e:
+            logger.error(f"Gagal rekomendasi makanan pake {model_name}: {e}")
+            continue
     return None
 
-# --- FUNGSI VISION (BACA GAMBAR) ---
 async def analisis_foto_makanan(image_bytes, caption=""):
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
     prompt_text = "Analisis foto makanan ini sebagai ahli gizi. Berikan output HANYA format JSON murni dengan key: nama_makanan, estimasi_porsi, kalori, protein, karbo, lemak, gula. Perkirakan gula (dalam gram) secara realistis. Caption: " + caption
@@ -96,7 +104,7 @@ async def analisis_foto_makanan(image_bytes, caption=""):
         try:
             response = await groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": user_content}],
-                model=model_name, temperature=0.2, max_completion_tokens=500, response_format={"type": "json_object"}
+                model=model_name, temperature=0.2, max_tokens=500, response_format={"type": "json_object"}
             )
             return json.loads(response.choices[0].message.content.strip())
         except Exception as e:
@@ -110,7 +118,7 @@ async def koreksi_foto_makanan(koreksi_user):
         try:
             response = await groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt_text}],
-                model=model_name, temperature=0.2, max_completion_tokens=500, response_format={"type": "json_object"}
+                model=model_name, temperature=0.2, max_tokens=500, response_format={"type": "json_object"}
             )
             return json.loads(response.choices[0].message.content.strip())
         except Exception as e:
@@ -136,7 +144,7 @@ async def analisis_alat_gym(image_bytes):
         try:
             response = await groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": user_content}],
-                model=model_name, temperature=0.2, max_completion_tokens=500
+                model=model_name, temperature=0.2, max_tokens=500
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
@@ -144,7 +152,6 @@ async def analisis_alat_gym(image_bytes):
             continue
     return None
 
-# --- FUNGSI AUDIO (VOICE NOTE) ---
 async def transkripsi_audio(audio_file_path):
     try:
         with open(audio_file_path, "rb") as file:
@@ -175,7 +182,7 @@ async def proses_voice_note(teks):
         try:
             response = await groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
-                model=model_name, temperature=0.1, max_completion_tokens=500, response_format={"type": "json_object"}
+                model=model_name, temperature=0.1, max_tokens=500, response_format={"type": "json_object"}
             )
             return json.loads(response.choices[0].message.content.strip())
         except Exception as e:
@@ -183,7 +190,6 @@ async def proses_voice_note(teks):
             continue
     return None
 
-# --- FUNGSI CHAT PT AI ---
 async def chat_dengan_pt(user_id, pesan_baru):
     history = await ambil_chat_history(user_id)
     user = await get_user_profile(user_id)
@@ -203,7 +209,7 @@ async def chat_dengan_pt(user_id, pesan_baru):
     )
     
     messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": pesan_baru}]
-    model_prioritas = ["llama-3.3-70b-versatile"] + MODEL_GROQ_LIST
+    model_prioritas = MODEL_GROQ_LIST if MODEL_GROQ_LIST else ["openai/gpt-oss-20b"]
     
     for model_name in model_prioritas:
         try:
@@ -211,11 +217,6 @@ async def chat_dengan_pt(user_id, pesan_baru):
                 messages=messages, model=model_name, temperature=0.3, max_tokens=512, frequency_penalty=0.8, presence_penalty=0.8
             )
             hasil = response.choices[0].message.content.strip()
-            if hasil and " dan " in hasil.lower():
-                kata = hasil.lower().split()
-                if len(kata) > 10 and len(set(kata)) < len(kata) * 0.3: 
-                    logger.warning(f"Model {model_name} ngulang kata. Skip.")
-                    continue
             if hasil: return hasil
         except Exception as e:
             logger.warning(f"Model {model_name} gagal (chat PT): {e}"); continue
