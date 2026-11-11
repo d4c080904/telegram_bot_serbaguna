@@ -45,7 +45,7 @@ async def callback_meal_planner(callback: CallbackQuery):
         if resep:
             teks = f"🍳 <b>REKOMENDASI MAKANAN</b>\n━━━━━━━━━━━━━━━━━━━━\n\nSisa kalori lu: <b>{sisa_kalori} kcal</b>\n\n{resep}"
             builder = InlineKeyboardBuilder()
-            builder.button(text="🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode")
+            builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama") # <--- BALIK KE BERANDA
             await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=builder.as_markup())
         else:
             await callback.message.edit_text("❌ AI-nya lagi bingung nyari resep. Coba lagi nanti ya.", parse_mode="HTML")

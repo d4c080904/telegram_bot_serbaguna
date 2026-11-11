@@ -21,7 +21,7 @@ async def callback_scan_alat(callback: CallbackQuery):
             "Gw bakal kasih tau nama alat, otot yang dilatih, dan cara pakenya yang bener."
         )
         builder = InlineKeyboardBuilder()
-        builder.button(text="❌ Batal", callback_data="menu_gym_mode")
+        builder.button(text="❌ Batal", callback_data="menu_utama") # <--- BALIK KE BERANDA
         try:
             await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=builder.as_markup())
         except Exception:
@@ -54,7 +54,7 @@ async def proses_foto_alat(message: Message):
             
         hasil = result["data"]
         builder = InlineKeyboardBuilder()
-        builder.button(text="🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode")
+        builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama") # <--- BALIK KE BERANDA
         
         try:
             await pesan_tunggu.edit_text(hasil, reply_markup=builder.as_markup())

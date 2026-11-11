@@ -61,7 +61,7 @@ async def tampil_dashboard_progress(chat_id, user_id, message_id=None, bot=None)
     builder.button(text="💧 Minum 500ml", callback_data="water_500")
     builder.button(text="🚰 Minum 1 Liter", callback_data="water_1000")
     builder.button(text="⚖️ Catat Berat Badan", callback_data="input_berat")
-    builder.button(text="🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode")
+    builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama") # <--- BALIK KE BERANDA
     builder.adjust(2, 1, 1, 1)
     
     try:

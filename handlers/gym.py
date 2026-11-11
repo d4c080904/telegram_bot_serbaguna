@@ -38,7 +38,7 @@ async def tampil_menu_gym(chat_id, user_id, message_id=None, bot=None):
     builder.button(text="💪 Mode Pro Gym", callback_data="gym_pro_start")
     builder.button(text="📊 Profil Saya", callback_data="gym_view_profile")
     builder.button(text="📝 Log Latihan", callback_data="gym_log_info")
-    builder.button(text="🔙 Kembali ke MENU UTAMA", callback_data="menu_utama")
+    builder.button(text="🔙 Kembali ke MENU UTAMA", callback_data="menu_utama") # <--- BALIK KE BERANDA
     builder.adjust(2, 2, 1)
     
     try:
@@ -49,11 +49,10 @@ async def tampil_menu_gym(chat_id, user_id, message_id=None, bot=None):
     except Exception as e:
         logger.error(f"tampil_menu_gym error: {e}")
 
-# --- TAMBAHAN: HANDLER BUAT BALIK KE GYM MODE ---
 @router.callback_query(F.data == "menu_gym_mode")
 async def callback_menu_gym_mode(callback: CallbackQuery, state: FSMContext):
     try:
-        await state.clear() # Bersihin state kalo ada yang nyangkut
+        await state.clear()
         await callback.answer()
         await tampil_menu_gym(callback.message.chat.id, str(callback.from_user.id), callback.message.message_id, callback.bot)
     except Exception as e:

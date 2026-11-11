@@ -10,7 +10,6 @@ from utils.helpers import hitung_bmi, kategori_bmi
 logger = logging.getLogger(__name__)
 
 MODEL_GROQ_LIST = []
-# Model Vision yang beneran aktif di Groq saat ini
 MODEL_VISION_LIST = [
     "qwen/qwen3.8-27b",
     "meta-llama/llama-4-scout-17b-16e-instruct"
@@ -20,11 +19,9 @@ async def init_models():
     global MODEL_GROQ_LIST
     print("Mengecek daftar model Groq...")
     try:
-        # FIX: AsyncGroq models.list() itu coroutine, wajib pakai await
         daftar_model = await groq_client.models.list()
         semua_model = [m.id for m in daftar_model.data if "whisper" not in m.id and "guard" not in m.id and "orpheus" not in m.id and "tts" not in m.id]
         
-        # Model text terbaru pengganti llama-3.1/3.3
         fallback_models = ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
         
         MODEL_GROQ_LIST = []
@@ -178,7 +175,8 @@ async def proses_voice_note(teks):
     - Jika user mencatat latihan gym/olahraga, isi `gym_data`. Kosongkan `food_data`.
     - Jika user cuma ngobrol atau nanya hal di luar gym/makanan, kosongkan KEDUANYA (set null).
     """
-    for model_name in MODEL_VISION_LIST:
+    model_prioritas = MODEL_GROQ_LIST if MODEL_GROQ_LIST else ["openai/gpt-oss-20b"]
+    for model_name in model_prioritas:
         try:
             response = await groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
@@ -186,7 +184,7 @@ async def proses_voice_note(teks):
             )
             return json.loads(response.choices[0].message.content.strip())
         except Exception as e:
-            logger.warning(f"Model Vision {model_name} gagal (voice note): {e}")
+            logger.warning(f"Model {model_name} gagal (voice note): {e}")
             continue
     return None
 
@@ -220,4 +218,38 @@ async def chat_dengan_pt(user_id, pesan_baru):
             if hasil: return hasil
         except Exception as e:
             logger.warning(f"Model {model_name} gagal (chat PT): {e}"); continue
+    return None
+
+# --- FITUR BARU: ANALISIS TEKS MAKANAN ---
+async def analisis_teks_makanan(teks):
+    prompt = f"""
+    Kamu adalah Ahli Gizi. User mengetik catatan makanan seperti ini:
+    "{teks}"
+
+    Tugasmu: Ekstrak teks di atas jadi JSON murni. Jika teks tersebut JELAS berisi makanan/minuman, isi datanya.
+    Jika teks tersebut BUKAN makanan (misal cuma nanya, atau ngobrol), balikin "is_food": false.
+    
+    Output HARUS JSON murni format ini:
+    {{
+      "is_food": boolean,
+      "nama_makanan": "string",
+      "estimasi_porsi": "string",
+      "kalori": number,
+      "protein": number,
+      "karbo": number,
+      "lemak": number,
+      "gula": number
+    }}
+    """
+    model_prioritas = MODEL_GROQ_LIST if MODEL_GROQ_LIST else ["openai/gpt-oss-20b"]
+    for model_name in model_prioritas:
+        try:
+            response = await groq_client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model=model_name, temperature=0.1, max_tokens=500, response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content.strip())
+        except Exception as e:
+            logger.warning(f"Model {model_name} gagal (analisis teks makanan): {e}")
+            continue
     return None

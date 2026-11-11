@@ -36,8 +36,11 @@ async def tampil_dashboard_kalori(chat_id, user_id, message_id=None, bot=None):
     batas_gula = 25 if target == 'cutting' else 50
     
     masuk_kalori, masuk_gula = await get_total_makro_hari_ini(user_id)
+    
+    masuk_kalori = int(masuk_kalori)
+    masuk_gula = round(float(masuk_gula), 1)
     sisa_kalori = batas_kalori - masuk_kalori
-    sisa_gula = batas_gula - masuk_gula
+    sisa_gula = round(batas_gula - masuk_gula, 1)
     
     now = datetime.datetime.now(WIB_TZ)
     hari_id = HARI_INDONESIA.get(now.strftime("%A"), now.strftime("%A"))
@@ -65,7 +68,11 @@ async def tampil_dashboard_kalori(chat_id, user_id, message_id=None, bot=None):
     builder.button(text="📸 Foto Makanan", callback_data="kalori_foto")
     builder.button(text="📝 Hapus Log Terakhir", callback_data="kalori_hapus")
     builder.button(text="📊 Lihat History", callback_data="kalori_history")
-    builder.button(text="🔙 Kembali ke GYM MODE", callback_data="menu_gym_mode")
+    
+    # --- INI YANG DIUBAH: LANGSUNG KE MENU UTAMA ---
+    builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama")
+    # -----------------------------------------------
+    
     builder.adjust(1, 2, 1)
     
     try:
@@ -129,8 +136,12 @@ async def callback_kalori_history(callback: CallbackQuery):
             for i, row in enumerate(history, 1):
                 nama = row['nama_makanan']
                 porsi = row['estimasi_porsi']
-                kal = row['kalori']
-                gula = row['gula']
+                kal = int(row['kalori'])
+                
+                # --- FIX: Bulatkan gula di history ---
+                gula = round(float(row['gula']), 1) if row['gula'] else 0.0
+                # -------------------------------------
+                
                 waktu_db = row['waktu']
                 try:
                     jam_str = waktu_db.strftime('%H:%M')
@@ -171,28 +182,35 @@ async def proses_foto_makanan(message: Message):
         )
         
         builder = InlineKeyboardBuilder()
-        builder.button(text="🔙 Kembali ke Menu", callback_data="menu_kalori")
+        # --- INI YANG DIUBAH: HASIL SCAN LANGSUNG KE MENU UTAMA ---
+        builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama") 
+        # ----------------------------------------------------------
         
         if result["status"] == "duplicate":
             await pesan_tunggu.edit_text(
                 "⚠️ <b>Foto Duplikat Terdeteksi!</b>\n\nFoto ini persis kayak yang udah lu kirim dan catat hari ini. Biar kalori lu nggak dobel, gw abaikan ya bro. 👍",
-                parse_mode="HTML"
+                parse_mode="HTML", reply_markup=builder.as_markup()
             )
             return
             
         if result["status"] == "ai_failed":
-            await pesan_tunggu.edit_text("❌ AI gagal menganalisis foto. Coba kirim ulang dengan foto yang lebih jelas.")
+            await pesan_tunggu.edit_text("❌ AI gagal menganalisis foto. Coba kirim ulang dengan foto yang lebih jelas.", reply_markup=builder.as_markup())
             return
             
         if result["status"] == "db_failed":
-            await pesan_tunggu.edit_text("❌ Gagal menyimpan data ke database.")
+            await pesan_tunggu.edit_text("❌ Gagal menyimpan data ke database.", reply_markup=builder.as_markup())
             return
             
         if result["status"] == "error":
-            await pesan_tunggu.edit_text("❌ Terjadi kesalahan sistem saat memproses foto.")
+            await pesan_tunggu.edit_text("❌ Terjadi kesalahan sistem saat memproses foto.", reply_markup=builder.as_markup())
             return
             
         hasil = result["data"]
+        
+        # --- FIX: Bulatkan gula di pesan sukses ---
+        gula_hasil = round(float(hasil.get('gula', 0)), 1)
+        # ------------------------------------------
+
         teks_balasan = (
             f"✅ <b>Berhasil Dicatat!</b>\n\n"
             f"🍽️ Nama: <b>{hasil.get('nama_makanan')}</b>\n"
@@ -201,7 +219,7 @@ async def proses_foto_makanan(message: Message):
             f"🥩 Protein: <b>{hasil.get('protein')}g</b>\n"
             f"🍚 Karbo: <b>{hasil.get('karbo')}g</b>\n"
             f"🧈 Lemak: <b>{hasil.get('lemak')}g</b>\n"
-            f"🍭 Gula: <b>{hasil.get('gula')}g</b>\n"
+            f"🍭 Gula: <b>{gula_hasil}g</b>\n"
         )
         await pesan_tunggu.edit_text(teks_balasan, parse_mode="HTML", reply_markup=builder.as_markup())
         await tampil_dashboard_kalori(message.chat.id, user_id, bot=message.bot)

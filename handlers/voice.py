@@ -1,47 +1,57 @@
+import logging
 import os
 import tempfile
-import logging
 import hashlib
-from bot_instance import bot
-from services.ai import transkripsi_audio, proses_voice_note
-from database.queries import tambah_food_log
-from handlers.calorie import tampil_dashboard_kalori
+from aiogram import Router, F
+from aiogram.types import Message
+
+from services.ai import transkripsi_audio, proses_voice_note, analisis_gym_noob, analisis_gym_pro
+from database.queries import tambah_food_log, get_gym_profile
+from database.db import get_db
 from utils.helpers import strip_markdown
+from handlers.calorie import tampil_dashboard_kalori
 
 logger = logging.getLogger(__name__)
+router = Router()
 
-@bot.message_handler(content_types=['voice'])
-def handle_voice(pesan):
-    user_id = str(pesan.from_user.id)
+@router.message(F.voice)
+async def handle_voice(message: Message):
+    user_id = str(message.from_user.id)
+    await message.bot.send_chat_action(message.chat.id, 'record_voice')
     
-    bot.send_chat_action(pesan.chat.id, 'typing')
-    pesan_tunggu = bot.reply_to(pesan, "🎙️ _Lagi dengerin voice note lu..._")
+    pesan_tunggu = await message.reply("🎙️ <i>Lagi dengerin voice note lu...</i>", parse_mode="HTML")
     
     try:
-        file_info = bot.get_file(pesan.voice.file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
+        # 1. Download file VN
+        file_id = message.voice.file_id
+        file_info = await message.bot.get_file(file_id)
+        downloaded_file = await message.bot.download_file(file_info.file_path)
         
+        # 2. Simpan ke temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as temp_audio:
-            temp_audio.write(downloaded_file)
+            temp_audio.write(downloaded_file.read())
             temp_audio_path = temp_audio.name
             
-        teks_transkrip = transkripsi_audio(temp_audio_path)
+        # 3. Transkrip
+        teks_transkrip = await transkripsi_audio(temp_audio_path)
         
+        # Hapus temp file
         try:
             os.remove(temp_audio_path)
         except Exception:
             pass
             
         if not teks_transkrip:
-            bot.edit_message_text("❌ Gagal transkrip suara. Coba bicara lebih jelas ya.", pesan.chat.id, pesan_tunggu.message_id)
+            await pesan_tunggu.edit_text("❌ Gagal transkrip suara. Coba bicara lebih jelas ya.")
             return
             
-        bot.edit_message_text(f"🎙️ *Lu bilang:*\n_{teks_transkrip}_\n\n⏳ _AI lagi mikir..._", pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown')
+        await pesan_tunggu.edit_text(f"🎙️ <b>Lu bilang:</b>\n<i>{teks_transkrip}</i>\n\n⏳ <i>AI lagi mikir...</i>", parse_mode="HTML")
         
-        hasil = proses_voice_note(teks_transkrip)
+        # 4. Proses Teks
+        hasil = await proses_voice_note(teks_transkrip)
         
         if not hasil:
-            bot.edit_message_text("❌ AI gagal memahami perintah suara.", pesan.chat.id, pesan_tunggu.message_id)
+            await pesan_tunggu.edit_text("❌ AI gagal memahami perintah suara.")
             return
             
         fd = hasil.get('food_data')
@@ -49,11 +59,11 @@ def handle_voice(pesan):
         
         # KALAU LAGI NYATET MAKANAN
         if fd:
-            berhasil = tambah_food_log(
+            berhasil = await tambah_food_log(
                 user_id, 
                 pesan_tunggu.message_id, 
-                pesan.message_id, 
-                hashlib.md5(downloaded_file).hexdigest(),
+                message.message_id, 
+                hashlib.md5(downloaded_file.read()).hexdigest(),
                 fd.get('nama_makanan', 'Makanan'), 
                 fd.get('estimasi_porsi', '1 porsi'), 
                 fd.get('kalori', 0), 
@@ -63,51 +73,47 @@ def handle_voice(pesan):
                 fd.get('gula', 0)
             )
             if berhasil:
-                bot.edit_message_text(
-                    f"✅ *Berhasil Dicatat dari Suara!*\n\n"
-                    f"🍽️ Nama: *{fd.get('nama_makanan')}*\n"
-                    f"🍛 Porsi: *{fd.get('estimasi_porsi')}*\n"
-                    f"🔥 Kalori: *{fd.get('kalori')} kcal*\n"
-                    f"🍭 Gula: *{fd.get('gula')}g*\n",
-                    pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown'
+                await pesan_tunggu.edit_text(
+                    f"✅ <b>Berhasil Dicatat dari Suara!</b>\n\n"
+                    f"🍽️ Nama: <b>{fd.get('nama_makanan')}</b>\n"
+                    f"🍛 Porsi: <b>{fd.get('estimasi_porsi')}</b>\n"
+                    f"🔥 Kalori: <b>{fd.get('kalori')} kcal</b>\n"
+                    f"🍭 Gula: <b>{fd.get('gula')}g</b>\n",
+                    parse_mode="HTML"
                 )
-                tampil_dashboard_kalori(pesan.chat.id, user_id)
+                await tampil_dashboard_kalori(message.chat.id, user_id, bot=message.bot)
             else:
-                bot.edit_message_text("❌ Gagal simpan data makanan ke database.", pesan.chat.id, pesan_tunggu.message_id)
+                await pesan_tunggu.edit_text("❌ Gagal simpan data makanan ke database.")
                 
         # KALAU LAGI NYATET GYM
         elif gd:
-            bot.edit_message_text(f"💪 *Tercatat Latihan dari Suara:*\n_{gd}_\n\n⏳ _PT AI lagi ngecek data & mikir evaluasinya..._", pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown')
+            await pesan_tunggu.edit_text(f"💪 <b>Tercatat Latihan dari Suara:</b>\n<i>{gd}</i>\n\n⏳ <i>PT AI lagi ngecek data & mikir evaluasinya...</i>", parse_mode="HTML")
             
-            from database.queries import get_gym_profile, get_db
-            from services.ai import analisis_gym_noob, analisis_gym_pro
-            
-            profil = get_gym_profile(user_id)
+            profil = await get_gym_profile(user_id)
             if not profil:
-                bot.edit_message_text("⚠️ Lu belum punya profil Gym. Bikin dulu pakai `/gym` ya.", pesan.chat.id, pesan_tunggu.message_id)
+                await pesan_tunggu.edit_text("⚠️ Lu belum punya profil Gym. Bikin dulu pakai /gym ya.")
                 return
 
-            conn = get_db(); c = conn.cursor()
-            c.execute("INSERT INTO gym_logs (user_id, log_teks) VALUES (?, ?)", (user_id, gd))
-            conn.commit(); conn.close()
+            async with await get_db() as conn:
+                await conn.execute("INSERT INTO gym_logs (user_id, log_teks) VALUES ($1, $2)", user_id, gd)
             
             if profil['mode'] == 'noob':
-                hasil_pt = analisis_gym_noob(profil['umur'], profil['berat'], profil['tinggi'])
+                hasil_pt = await analisis_gym_noob(profil['umur'], profil['berat'], profil['tinggi'])
             else:
-                hasil_pt = analisis_gym_pro(profil)
+                hasil_pt = await analisis_gym_pro(profil)
 
             if hasil_pt:
                 try:
-                    bot.edit_message_text(hasil_pt, pesan.chat.id, pesan_tunggu.message_id, parse_mode='Markdown')
+                    await pesan_tunggu.edit_text(hasil_pt, parse_mode="HTML")
                 except Exception:
-                    bot.edit_message_text(strip_markdown(hasil_pt), pesan.chat.id, pesan_tunggu.message_id)
+                    await pesan_tunggu.edit_text(strip_markdown(hasil_pt))
             else:
-                bot.edit_message_text("❌ AI lagi error nih bro.", pesan.chat.id, pesan_tunggu.message_id)
+                await pesan_tunggu.edit_text("❌ AI lagi error nih bro.")
             
-        # KALAU CUMA NGOBROL (FITUR CHAT UDAH DIHAPUS)
+        # KALAU CUMA NGOBROL
         else:
-            bot.edit_message_text("❓ Gw dengerin suara lu, tapi gw bingung itu makanan atau olahraga. Coba ulangi ya bro.", pesan.chat.id, pesan_tunggu.message_id)
+            await pesan_tunggu.edit_text("❓ Gw dengerin suara lu, tapi gw bingung itu makanan atau olahraga. Coba ulangi ya bro.")
             
     except Exception as e:
         logger.error(f"Voice Handler Error: {e}")
-        bot.edit_message_text("❌ Terjadi kesalahan saat memproses suara.", pesan.chat.id, pesan_tunggu.message_id)
+        await pesan_tunggu.edit_text("❌ Terjadi kesalahan saat memproses suara.")
