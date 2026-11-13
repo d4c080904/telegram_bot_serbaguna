@@ -55,8 +55,6 @@ async def setup_db():
         # =====================================================================
         # --- TAMBAHAN FASE ENTERPRISE ---
         # =====================================================================
-
-        # 1. Bikin tabel users (buat profil dasar & premium)
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 user_id VARCHAR(255) PRIMARY KEY,
@@ -70,14 +68,12 @@ async def setup_db():
             )
         ''')
 
-        # 2. Pindahin data lama dari user_profiles ke users (Biar data lu gak ilang)
         await conn.execute('''
             INSERT INTO users (user_id, nama, umur, tinggi, gender)
             SELECT user_id, nama, umur, tinggi, jenis_kelamin FROM user_profiles
             ON CONFLICT (user_id) DO NOTHING
         ''')
 
-        # 3. Bikin VIEW daily_logs (Ngerangkum makanan, air, olahraga jadi 1 baris per tanggal)
         await conn.execute('''
             CREATE OR REPLACE VIEW daily_logs AS
             SELECT
@@ -93,6 +89,18 @@ async def setup_db():
                 UNION
                 SELECT user_id, tanggal FROM workout_logs
             ) d
+        ''')
+
+        # --- TAMBAHAN PAYMENT ---
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS payment_events (
+                id SERIAL PRIMARY KEY,
+                transaction_id VARCHAR(255) UNIQUE,
+                user_id VARCHAR(255),
+                amount INTEGER,
+                status VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
         ''')
         # =====================================================================
 

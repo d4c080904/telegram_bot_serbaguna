@@ -15,6 +15,9 @@ from database.db import get_db
 logger = logging.getLogger(__name__)
 router = Router()
 
+# LINK NGROK LU GW HARDCODE DI SINI
+WEBAPP_URL = "https://fifth-twiddle-richly.ngrok-free.dev"
+
 async def buat_ringkasan_dashboard(user_id):
     air = await get_total_air_hari_ini(user_id)
     target_air = 2000
@@ -36,10 +39,10 @@ async def buat_ringkasan_dashboard(user_id):
 @router.message(Command("start", "help", "menu"))
 async def kirim_sambutan(message: Message, state: FSMContext):
     try:
-        await state.clear() # <--- KUNCI: Bersihin state nyangkut
+        await state.clear()
         user_id = str(message.from_user.id)
         await set_chat_mode(user_id, False)
-        await clear_gym_wizard(user_id) # <--- Bersihin wizard gym
+        await clear_gym_wizard(user_id)
         
         user = await get_user_profile(user_id)
         
@@ -50,7 +53,7 @@ async def kirim_sambutan(message: Message, state: FSMContext):
             
         ringkasan = await buat_ringkasan_dashboard(user_id)
         teks = f"Halo <b>{user['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
-        await message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
+        await message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
     except Exception as e:
         logger.error(f"[start] error: {e}")
 
@@ -113,9 +116,9 @@ async def callback_gender(callback: CallbackQuery):
         teks = f"✅ Mantap! Data lu udah disimpen.\n\nHalo <b>{data['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try:
-            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
+            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
         except Exception:
-            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
+            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
             
     except Exception as e:
         logger.error(f"[callback_gender] error: {e}")
@@ -123,7 +126,7 @@ async def callback_gender(callback: CallbackQuery):
 @router.callback_query(F.data == "menu_utama")
 async def callback_menu_utama(callback: CallbackQuery, state: FSMContext):
     try:
-        await state.clear() # <--- KUNCI: Bersihin state nyangkut
+        await state.clear()
         await callback.answer()
         user_id = str(callback.from_user.id)
         await set_chat_mode(user_id, False)
@@ -136,9 +139,9 @@ async def callback_menu_utama(callback: CallbackQuery, state: FSMContext):
         teks = f"Halo <b>{nama}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try: 
-            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
+            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
         except Exception: 
-            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama())
+            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
     except Exception as e:
         logger.error(f"[menu_utama] error: {e}")
 

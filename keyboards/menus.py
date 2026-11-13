@@ -1,7 +1,7 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-def buat_menu_utama():
+def buat_menu_utama(user_id: str, webapp_url: str):
     builder = InlineKeyboardBuilder()
     builder.button(text="🍎 Kalori & Gula", callback_data="menu_kalori")
     builder.button(text="💧 Progress & Air", callback_data="menu_progress")
@@ -10,9 +10,15 @@ def buat_menu_utama():
     builder.button(text="🔍 Scan Alat Gym", callback_data="menu_scan_alat")
     builder.button(text="🍳 Meal Planner", callback_data="menu_meal_planner")
     builder.button(text="📄 Laporan PDF", callback_data="menu_export")
+    builder.button(text="👑 Premium", callback_data="menu_premium")
     builder.button(text="📊 Statistik", callback_data="menu_stats")
     builder.button(text="❓ Bantuan", callback_data="menu_help")
-    builder.adjust(2) # Diatur 2 kolom biar rapi
+    
+    # --- TOMBOL WEB APP (MINI APP) ---
+    full_url = f"{webapp_url}/?user_id={user_id}"
+    builder.button(text="📈 Web Dashboard", web_app=WebAppInfo(url=full_url))
+    
+    builder.adjust(2)
     return builder.as_markup()
 
 def tombol_kembali():

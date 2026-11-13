@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GymMate Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #17212b; /* Warna khas Telegram Dark Mode */
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+        h2 { text-align: center; color: #4da3ff; }
+        .card {
+            background-color: #242f3d;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        canvas { width: 100% !important; height: 250px !important; }
+    </style>
+</head>
+<body>
+
+    <h2>📈 Dashboard GymMate</h2>
+    
+    <div class="card">
+        <h3>Kalori (Masuk vs Terbakar)</h3>
+        <canvas id="calorieChart"></canvas>
+    </div>
+
+    <div class="card">
+        <h3>Tren Berat Badan (kg)</h3>
+        <canvas id="weightChart"></canvas>
+    </div>
+
+    <script>
+        // Ngambil user_id dari URL (query parameter)
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('user_id') || "7193308926"; // Ganti default ini kalo perlu
+
+        // Fungsi Fetch Data dari API
+        fetch(`/api/chart_data/${userId}`)
+            .then(response => response.json())
+            .then(data => {
+                
+                // --- 1. Setup Grafik Kalori ---
+                const labelsKalori = data.daily.map(item => item.tanggal);
+                const dataMasuk = data.daily.map(item => item.total_kalori_masuk);
+                const dataTerbakar = data.daily.map(item => item.total_kalori_keluar);
+
+                const ctxCal = document.getElementById('calorieChart').getContext('2d');
+                new Chart(ctxCal, {
+                    type: 'bar',
+                    data: {
+                        labels: labelsKalori,
+                        datasets: [
+                            { label: 'Kalori Masuk', data: dataMasuk, backgroundColor: '#4da3ff' },
+                            { label: 'Kalori Terbakar', data: dataTerbakar, backgroundColor: '#ff4d4d' }
+                        ]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+
+                // --- 2. Setup Grafik Berat Badan ---
+                const labelsBerat = data.weight.map(item => item.tanggal);
+                const dataBerat = data.weight.map(item => item.berat);
+
+                const ctxWeight = document.getElementById('weightChart').getContext('2d');
+                new Chart(ctxWeight, {
+                    type: 'line',
+                    data: {
+                        labels: labelsBerat,
+                        datasets: [{
+                            label: 'Berat Badan (kg)',
+                            data: dataBerat,
+                            borderColor: '#4dff88',
+                            backgroundColor: 'rgba(77, 255, 136, 0.2)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+
+            })
+            .catch(err => console.error("Gagal load data:", err));
+    </script>
+</body>
+</html>

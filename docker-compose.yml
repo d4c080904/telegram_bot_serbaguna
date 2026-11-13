@@ -12,6 +12,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # --- INI KUNCINYA: Kasih tau Docker cara ngecek DB udah siap apa belum ---
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gymmate -d gymmate_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # ==========================================
   # INI SERVICE BOT NYA BRO, JANGAN SAMPE KELUPAAN
@@ -21,7 +27,8 @@ services:
     container_name: gymmate_bot
     restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy # <--- Bot bakal nunggu DB sehat dulu baru nyala
     env_file:
       - .env
     environment:

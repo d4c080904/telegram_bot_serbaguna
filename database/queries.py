@@ -26,14 +26,12 @@ async def get_user_profile(user_id):
 async def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
     try:
         async with await get_db() as conn:
-            # 1. Simpan ke tabel lama (Biar fitur lama aman)
             await conn.execute('''INSERT INTO user_profiles (user_id, nama, umur, berat, tinggi, jenis_kelamin, updated_at) 
                          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
                          ON CONFLICT (user_id) DO UPDATE SET 
                          nama=EXCLUDED.nama, umur=EXCLUDED.umur, berat=EXCLUDED.berat, tinggi=EXCLUDED.tinggi, jenis_kelamin=EXCLUDED.jenis_kelamin, updated_at=CURRENT_TIMESTAMP''', 
                       str(user_id), nama, int(umur), float(berat), float(tinggi), jenis_kelamin)
             
-            # 2. Simpan juga ke tabel Enterprise users
             await conn.execute('''INSERT INTO users (user_id, nama, umur, tinggi, gender) 
                          VALUES ($1, $2, $3, $4, $5)
                          ON CONFLICT (user_id) DO UPDATE SET 
@@ -339,4 +337,42 @@ async def set_user_premium(user_id, days):
             return True
     except Exception as e: 
         logger.error(f"set_user_premium error: {e}")
+        return False
+
+# --- FUNGSI PREMIUM & PAYMENT ---
+async def get_user_premium_status(user_id):
+    try:
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT premium_until FROM users WHERE user_id = $1", str(user_id))
+            if row and row['premium_until']:
+                if row['premium_until'] > datetime.datetime.now():
+                    return True, row['premium_until']
+            return False, None
+    except Exception as e: 
+        logger.error(f"get_user_premium_status error: {e}")
+        return False, None
+
+async def catat_payment_event(transaction_id, user_id, amount, status):
+    try:
+        async with await get_db() as conn:
+            result = await conn.execute('''
+                INSERT INTO payment_events (transaction_id, user_id, amount, status) 
+                VALUES ($1, $2, $3, $4) ON CONFLICT (transaction_id) DO NOTHING
+            ''', transaction_id, str(user_id), int(amount), status)
+            return "INSERT" in result
+    except Exception as e: 
+        logger.error(f"catat_payment_event error: {e}")
+        return False
+
+async def aktifkan_premium(user_id, days=30):
+    try:
+        async with await get_db() as conn:
+            await conn.execute('''
+                UPDATE users 
+                SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval 
+                WHERE user_id = $2
+            ''', str(days), str(user_id))
+            return True
+    except Exception as e: 
+        logger.error(f"aktifkan_premium error: {e}")
         return False
