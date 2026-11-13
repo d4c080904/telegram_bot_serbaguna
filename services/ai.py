@@ -21,19 +21,15 @@ async def init_models():
     try:
         daftar_model = await groq_client.models.list()
         semua_model = [m.id for m in daftar_model.data if "whisper" not in m.id and "guard" not in m.id and "orpheus" not in m.id and "tts" not in m.id]
-        
         fallback_models = ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
-        
         MODEL_GROQ_LIST = []
         for prioritas in PRIORITAS_MODEL:
             if prioritas in semua_model:
                 MODEL_GROQ_LIST.append(prioritas)
                 semua_model.remove(prioritas)
         MODEL_GROQ_LIST.extend(semua_model)
-        
         if not MODEL_GROQ_LIST:
             MODEL_GROQ_LIST = fallback_models
-            
         logger.info(f"✅ {len(MODEL_GROQ_LIST)} model Groq siap")
         logger.info(f"🥇 Model utama: {MODEL_GROQ_LIST[0]}")
     except Exception as e:
@@ -220,15 +216,12 @@ async def chat_dengan_pt(user_id, pesan_baru):
             logger.warning(f"Model {model_name} gagal (chat PT): {e}"); continue
     return None
 
-# --- FITUR BARU: ANALISIS TEKS MAKANAN ---
 async def analisis_teks_makanan(teks):
     prompt = f"""
     Kamu adalah Ahli Gizi. User mengetik catatan makanan seperti ini:
     "{teks}"
-
     Tugasmu: Ekstrak teks di atas jadi JSON murni. Jika teks tersebut JELAS berisi makanan/minuman, isi datanya.
     Jika teks tersebut BUKAN makanan (misal cuma nanya, atau ngobrol), balikin "is_food": false.
-    
     Output HARUS JSON murni format ini:
     {{
       "is_food": boolean,
@@ -251,5 +244,31 @@ async def analisis_teks_makanan(teks):
             return json.loads(response.choices[0].message.content.strip())
         except Exception as e:
             logger.warning(f"Model {model_name} gagal (analisis teks makanan): {e}")
+            continue
+    return None
+
+# --- FITUR BARU: ESTIMASI KALORI OLAHRAGA ---
+async def estimasi_kalori_olahraga(teks_olahraga, berat_badan):
+    prompt = f"""
+    User berat {berat_badan} kg, mengetik catatan olahraga: "{teks_olahraga}"
+    
+    Tugasmu: Ekstrak jadi JSON murni. Estimasi durasi dalam menit, dan kalori yang terbakar.
+    Output HANYA format JSON:
+    {{
+      "olahraga": "nama olahraga",
+      "durasi": number (menit),
+      "kalori_terbakar": number
+    }}
+    """
+    model_prioritas = MODEL_GROQ_LIST if MODEL_GROQ_LIST else ["openai/gpt-oss-20b"]
+    for model_name in model_prioritas:
+        try:
+            response = await groq_client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model=model_name, temperature=0.1, max_tokens=200, response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content.strip())
+        except Exception as e:
+            logger.warning(f"Model {model_name} gagal (estimasi olahraga): {e}")
             continue
     return None

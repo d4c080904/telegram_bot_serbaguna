@@ -26,11 +26,20 @@ async def get_user_profile(user_id):
 async def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
     try:
         async with await get_db() as conn:
+            # 1. Simpan ke tabel lama (Biar fitur lama aman)
             await conn.execute('''INSERT INTO user_profiles (user_id, nama, umur, berat, tinggi, jenis_kelamin, updated_at) 
                          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
                          ON CONFLICT (user_id) DO UPDATE SET 
                          nama=EXCLUDED.nama, umur=EXCLUDED.umur, berat=EXCLUDED.berat, tinggi=EXCLUDED.tinggi, jenis_kelamin=EXCLUDED.jenis_kelamin, updated_at=CURRENT_TIMESTAMP''', 
                       str(user_id), nama, int(umur), float(berat), float(tinggi), jenis_kelamin)
+            
+            # 2. Simpan juga ke tabel Enterprise users
+            await conn.execute('''INSERT INTO users (user_id, nama, umur, tinggi, gender) 
+                         VALUES ($1, $2, $3, $4, $5)
+                         ON CONFLICT (user_id) DO UPDATE SET 
+                         nama=EXCLUDED.nama, umur=EXCLUDED.umur, tinggi=EXCLUDED.tinggi, gender=EXCLUDED.gender''', 
+                      str(user_id), nama, int(umur), float(tinggi), jenis_kelamin)
+
             tanggal_ini = datetime.date.today()
             await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
             return True
@@ -264,11 +273,9 @@ async def delete_wizard_state(user_id, state_type):
             return True
     except Exception as e: logger.error(f"delete_wizard_state error: {e}"); return False
 
-# --- FUNGSI BARU UNTUK ADAPTIVE TDEE ---
 async def get_berat_14_hari_terakhir(user_id):
     try:
         async with await get_db() as conn:
-            # Ambil berat badan unik per tanggal, urutin dari yang terlama
             rows = await conn.fetch('''
                 SELECT tanggal, berat FROM weight_logs 
                 WHERE user_id = $1 AND tanggal >= CURRENT_DATE - INTERVAL '14 days'
@@ -279,3 +286,57 @@ async def get_berat_14_hari_terakhir(user_id):
     except Exception as e: 
         logger.error(f"get_berat_14_hari_terakhir error: {e}")
         return []
+
+async def tambah_workout_log(user_id, olahraga, durasi, kalori_terbakar):
+    try:
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            await conn.execute('''INSERT INTO workout_logs (user_id, tanggal, olahraga, durasi, kalori_terbakar) 
+                         VALUES ($1, $2, $3, $4, $5)''', 
+                      str(user_id), tanggal_ini, olahraga, int(durasi), int(kalori_terbakar))
+            return True
+    except Exception as e: 
+        logger.error(f"tambah_workout_log error: {e}")
+        return False
+
+async def get_total_kalori_terbakar_hari_ini(user_id):
+    try:
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            row = await conn.fetchrow("SELECT SUM(kalori_terbakar) as total FROM workout_logs WHERE user_id = $1 AND tanggal = $2", str(user_id), tanggal_ini)
+            return row['total'] if row['total'] else 0
+    except Exception as e: 
+        logger.error(f"get_total_kalori_terbakar error: {e}")
+        return 0
+
+async def get_history_workout_hari_ini(user_id):
+    try:
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            return await conn.fetch("SELECT olahraga, durasi, kalori_terbakar, waktu FROM workout_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id ASC", str(user_id), tanggal_ini)
+    except Exception as e: 
+        logger.error(f"get_history_workout error: {e}")
+        return []
+
+# --- FUNGSI BARU ENTERPRISE SCHEMA ---
+async def get_daily_logs(user_id, tanggal_str):
+    try:
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT * FROM daily_logs WHERE user_id = $1 AND tanggal = $2", str(user_id), tanggal_str)
+            return row
+    except Exception as e: 
+        logger.error(f"get_daily_logs error: {e}")
+        return None
+
+async def set_user_premium(user_id, days):
+    try:
+        async with await get_db() as conn:
+            await conn.execute('''
+                UPDATE users 
+                SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval 
+                WHERE user_id = $2
+            ''', str(days), str(user_id))
+            return True
+    except Exception as e: 
+        logger.error(f"set_user_premium error: {e}")
+        return False
