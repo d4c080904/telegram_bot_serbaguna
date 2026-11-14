@@ -376,3 +376,16 @@ async def aktifkan_premium(user_id, days=30):
     except Exception as e: 
         logger.error(f"aktifkan_premium error: {e}")
         return False
+
+# --- FUNGSI BARU VIP GATING ---
+async def cek_status_vip(user_id):
+    try:
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT premium_until FROM users WHERE user_id = $1", str(user_id))
+            if row and row['premium_until']:
+                if row['premium_until'] > datetime.datetime.now():
+                    return True
+            return False
+    except Exception as e:
+        logger.error(f"cek_status_vip error: {e}")
+        return False

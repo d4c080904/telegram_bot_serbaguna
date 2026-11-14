@@ -1,7 +1,7 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-def buat_menu_utama(user_id: str, webapp_url: str):
+def buat_menu_utama(user_id: str, webapp_url: str, is_vip: bool = False):
     builder = InlineKeyboardBuilder()
     builder.button(text="🍎 Kalori & Gula", callback_data="menu_kalori")
     builder.button(text="💧 Progress & Air", callback_data="menu_progress")
@@ -10,14 +10,16 @@ def buat_menu_utama(user_id: str, webapp_url: str):
     builder.button(text="🔍 Scan Alat Gym", callback_data="menu_scan_alat")
     builder.button(text="🍳 Meal Planner", callback_data="menu_meal_planner")
     builder.button(text="📄 Laporan PDF", callback_data="menu_export")
-    builder.button(text="👑 Premium", callback_data="menu_premium")
+    
+    if is_vip:
+        full_url = f"{webapp_url}/?user_id={user_id}&v=100" 
+        builder.button(text="📈 Web Dashboard (VIP)", web_app=WebAppInfo(url=full_url))
+        
+    else:
+        builder.button(text="👑 Upgrade ke VIP", callback_data="menu_premium")
+        
     builder.button(text="📊 Statistik", callback_data="menu_stats")
     builder.button(text="❓ Bantuan", callback_data="menu_help")
-    
-    # --- TOMBOL WEB APP (MINI APP) ---
-    full_url = f"{webapp_url}/?user_id={user_id}"
-    builder.button(text="📈 Web Dashboard", web_app=WebAppInfo(url=full_url))
-    
     builder.adjust(2)
     return builder.as_markup()
 

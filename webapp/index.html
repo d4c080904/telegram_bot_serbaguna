@@ -2,93 +2,364 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GymMate Dashboard</title>
+    
+    <!-- Font Premium (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #17212b; /* Warna khas Telegram Dark Mode */
-            color: #ffffff;
-            margin: 0;
-            padding: 20px;
+        /* CSS VARIABLES & RESET */
+        :root {
+            --bg-color: #0b0f19; /* Warna background deep space */
+            --card-bg: rgba(30, 41, 59, 0.6); /* Warna kaca */
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-main: #ffffff;
+            --text-muted: #94a3b8;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --gradient-btn: linear-gradient(135deg, #3b82f6, #8b5cf6); /* Biru ke ungu */
         }
-        h2 { text-align: center; color: #4da3ff; }
-        .card {
-            background-color: #242f3d;
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        
+        body { 
+            background: radial-gradient(circle at top right, #1e293b, #0b0f19 70%); 
+            color: var(--text-main); 
+            min-height: 100vh;
+            overflow-x: hidden;
         }
-        canvas { width: 100% !important; height: 250px !important; }
+
+        /* LOADING SCREEN */
+        #loading-screen { 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            height: 100vh; color: var(--text-muted); 
+        }
+        .spinner { 
+            width: 50px; height: 50px; border: 4px solid rgba(59, 130, 246, 0.2); 
+            border-top-color: var(--accent-blue); border-radius: 50%; 
+            animation: spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* APP CONTAINER */
+        #app-container { display: none; padding-bottom: 90px; }
+        
+        .page { display: none; animation: fadeIn 0.3s ease-out; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .content { padding: 20px; }
+
+        /* HEADERS */
+        .header { margin-bottom: 24px; }
+        .header h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+        .header p { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+
+        /* CARDS (GLASSMORPHISM) */
+        .card { 
+            background: var(--card-bg); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border); 
+            border-radius: 24px; 
+            padding: 20px; 
+            margin-bottom: 20px; 
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); 
+        }
+        .card h3 { font-size: 15px; font-weight: 600; color: var(--text-muted); margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        
+        .chart-container { position: relative; height: 200px; width: 100%; }
+
+        /* FORM & INPUTS */
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
+        .form-control { 
+            width: 100%; padding: 16px; border-radius: 16px; 
+            background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); 
+            color: white; font-size: 15px; transition: all 0.2s ease;
+        }
+        .form-control:focus { outline: none; border-color: var(--accent-blue); background: rgba(15, 23, 42, 0.9); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
+        
+        /* CUSTOM FILE INPUT */
+        input[type="file"]::file-selector-button {
+            background: rgba(255,255,255,0.1); border: none; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; margin-right: 16px; transition: 0.2s;
+        }
+        input[type="file"]::file-selector-button:hover { background: rgba(255,255,255,0.2); }
+
+        /* BUTTONS */
+        .btn-primary { 
+            width: 100%; padding: 18px; border: none; border-radius: 16px; 
+            background: var(--gradient-btn); color: white; 
+            font-size: 16px; font-weight: 700; cursor: pointer; 
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); 
+            transition: transform 0.1s ease, box-shadow 0.2s ease;
+            display: flex; justify-content: center; align-items: center; gap: 10px;
+        }
+        .btn-primary:active { transform: scale(0.97); }
+        .btn-primary:disabled { background: #334155; box-shadow: none; cursor: not-allowed; transform: none; }
+
+        /* BOTTOM NAVBAR (FLOATING) */
+        .navbar { 
+            position: fixed; bottom: 20px; left: 20px; right: 20px; 
+            background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            display: flex; justify-content: space-around; padding: 12px 0; 
+            border-radius: 24px; border: 1px solid var(--card-border); 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5); z-index: 100;
+        }
+        .nav-btn { 
+            background: none; border: none; color: var(--text-muted); 
+            font-size: 12px; font-weight: 600; display: flex; flex-direction: column; align-items: center; 
+            cursor: pointer; transition: all 0.3s ease; width: 50%;
+        }
+        .nav-btn span { font-size: 22px; margin-bottom: 4px; transition: transform 0.2s ease; }
+        .nav-btn.active { color: var(--accent-blue); }
+        .nav-btn.active span { transform: translateY(-4px); }
+
+        /* ERROR/ALERT BOX */
+        #error-screen { text-align: center; padding: 40px 20px; display: none; }
+        .alert-box { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); border-radius: 20px; padding: 30px; }
+        .alert-box h2 { color: var(--accent-red); font-size: 22px; margin-bottom: 10px; }
+        
+        .result-success { background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); border-radius: 12px; padding: 15px; font-size: 14px; margin-top: 15px; }
+        .result-error { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); border-radius: 12px; padding: 15px; font-size: 14px; margin-top: 15px; }
     </style>
 </head>
 <body>
 
-    <h2>📈 Dashboard GymMate</h2>
-    
-    <div class="card">
-        <h3>Kalori (Masuk vs Terbakar)</h3>
-        <canvas id="calorieChart"></canvas>
+    <!-- LOADING -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div style="font-weight: 600; letter-spacing: 1px;">GYMMATE AI</div>
     </div>
 
-    <div class="card">
-        <h3>Tren Berat Badan (kg)</h3>
-        <canvas id="weightChart"></canvas>
+    <!-- ERROR SCREEN -->
+    <div id="error-screen" class="content">
+        <div class="alert-box">
+            <h1 style="font-size: 50px; margin-bottom: 10px;">🔒</h1>
+            <h2 id="error-title">Akses Terbatas</h2>
+            <p id="error-desc" style="color: var(--text-muted); font-size: 14px; line-height: 1.5;">Terjadi kesalahan sistem.</p>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="app-container">
+        
+        <!-- TAB 1: DASHBOARD -->
+        <div id="page-dashboard" class="page active content">
+            <div class="header">
+                <h2>Dashboard</h2>
+                <p>Pantau progres harian lu bro.</p>
+            </div>
+            
+            <div class="card">
+                <h3>🔥 Kalori (Masuk vs Terbakar)</h3>
+                <div class="chart-container"><canvas id="calorieChart"></canvas></div>
+            </div>
+            
+            <div class="card">
+                <h3>⚖️ Tren Berat Badan</h3>
+                <div class="chart-container"><canvas id="weightChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- TAB 2: LOG MAKANAN -->
+        <div id="page-food" class="page content">
+            <div class="header">
+                <h2>Log Makanan</h2>
+                <p>Catat makanan pakai Foto atau Teks.</p>
+            </div>
+            
+            <div class="card">
+                <form id="foodForm">
+                    <div class="form-group">
+                        <label>Upload Foto Makanan (Opsional)</label>
+                        <input type="file" id="foodImage" class="form-control" accept="image/*" capture="environment">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Atau Ketik Deskripsi (Opsional)</label>
+                        <input type="text" id="foodText" class="form-control" placeholder="Contoh: Nasi padang 1 porsi...">
+                    </div>
+                    
+                    <button type="submit" class="btn-primary" id="submitFoodBtn">
+                        <span>🚀</span> Catat Makanan
+                    </button>
+                </form>
+                
+                <div id="resultBox"></div>
+            </div>
+        </div>
+
+        <!-- FLOATING NAVBAR -->
+        <div class="navbar">
+            <button class="nav-btn active" onclick="switchTab('dashboard', this)">
+                <span>📈</span> Dashboard
+            </button>
+            <button class="nav-btn" onclick="switchTab('food', this)">
+                <span>🍎</span> Log Makanan
+            </button>
+        </div>
     </div>
 
     <script>
-        // Ngambil user_id dari URL (query parameter)
-        const urlParams = new URLSearchParams(window.location.search);
-        const userId = urlParams.get('user_id') || "7193308926"; // Ganti default ini kalo perlu
+        const tg = window.Telegram.WebApp;
+        tg.expand(); 
+        tg.setHeaderColor('#0b0f19'); // Samain warna header Telegram
+        tg.setBackgroundColor('#0b0f19');
+        
+        const initData = tg.initData;
+        
+        // Fungsi Helper
+        function showError(title, desc) {
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('error-screen').style.display = 'block';
+            document.getElementById('error-title').innerText = title;
+            document.getElementById('error-desc').innerHTML = desc;
+        }
 
-        // Fungsi Fetch Data dari API
-        fetch(`/api/chart_data/${userId}`)
-            .then(response => response.json())
+        function switchTab(tabName, btn) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('page-' + tabName).classList.add('active');
+            btn.classList.add('active');
+            
+            // Haptic feedback (Getar di HP)
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        }
+
+        // --- 1. INIT DATA & CHART ---
+        if (!initData) {
+            showError("Bukan dari Telegram", "Silakan buka Mini App ini dari dalam bot GymMate.");
+        } else {
+            fetch('/api/chart_data', { headers: { 'X-Telegram-Init-Data': initData } })
+            .then(res => {
+                if (res.status === 403 || res.status === 401) {
+                    showError("Akses VIP Diperlukan", "Fitur ini cuma buat member VIP.<br>Silakan balik ke bot dan upgrade akun lu.");
+                    throw new Error("Unauthorized");
+                }
+                if (!res.ok) throw new Error("Server Error");
+                return res.json();
+            })
             .then(data => {
+                if (!data) return;
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('app-container').style.display = 'block';
                 
-                // --- 1. Setup Grafik Kalori ---
-                const labelsKalori = data.daily.map(item => item.tanggal);
-                const dataMasuk = data.daily.map(item => item.total_kalori_masuk);
-                const dataTerbakar = data.daily.map(item => item.total_kalori_keluar);
+                // GLOBAL CHART DEFAULTS (Biar fontnya rapi)
+                Chart.defaults.color = '#94a3b8';
+                Chart.defaults.font.family = "'Inter', sans-serif";
+                Chart.defaults.font.weight = '500';
 
+                // --- CHART KALORI (BATANG) ---
                 const ctxCal = document.getElementById('calorieChart').getContext('2d');
+                // Bikin efek gradien batang
+                let gradientBlue = ctxCal.createLinearGradient(0, 0, 0, 200);
+                gradientBlue.addColorStop(0, 'rgba(59, 130, 246, 1)');
+                gradientBlue.addColorStop(1, 'rgba(59, 130, 246, 0.2)');
+
                 new Chart(ctxCal, {
                     type: 'bar',
                     data: {
-                        labels: labelsKalori,
+                        labels: data.daily.map(i => i.tanggal),
                         datasets: [
-                            { label: 'Kalori Masuk', data: dataMasuk, backgroundColor: '#4da3ff' },
-                            { label: 'Kalori Terbakar', data: dataTerbakar, backgroundColor: '#ff4d4d' }
+                            { label: 'Masuk', data: data.daily.map(i => i.total_kalori_masuk), backgroundColor: gradientBlue, borderRadius: 8, borderSkipped: false },
+                            { label: 'Terbakar', data: data.daily.map(i => i.total_kalori_keluar), backgroundColor: '#ef4444', borderRadius: 8, borderSkipped: false }
                         ]
                     },
-                    options: { responsive: true, maintainAspectRatio: false }
+                    options: { 
+                        responsive: true, maintainAspectRatio: false, 
+                        plugins: { legend: { position: 'top', labels: { boxWidth: 10, usePointStyle: true } } },
+                        scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false } } }
+                    }
                 });
 
-                // --- 2. Setup Grafik Berat Badan ---
-                const labelsBerat = data.weight.map(item => item.tanggal);
-                const dataBerat = data.weight.map(item => item.berat);
-
+                // --- CHART BERAT BADAN (GARIS) ---
+                const weightLabels = data.weight.length > 0 ? data.weight.map(i => i.tanggal) : ['Belum ada data'];
+                const weightData = data.weight.length > 0 ? data.weight.map(i => i.berat) : [0];
+                
                 const ctxWeight = document.getElementById('weightChart').getContext('2d');
+                let gradientGreen = ctxWeight.createLinearGradient(0, 0, 0, 200);
+                gradientGreen.addColorStop(0, 'rgba(16, 185, 129, 0.5)');
+                gradientGreen.addColorStop(1, 'rgba(16, 185, 129, 0)');
+
                 new Chart(ctxWeight, {
                     type: 'line',
                     data: {
-                        labels: labelsBerat,
-                        datasets: [{
-                            label: 'Berat Badan (kg)',
-                            data: dataBerat,
-                            borderColor: '#4dff88',
-                            backgroundColor: 'rgba(77, 255, 136, 0.2)',
-                            fill: true,
-                            tension: 0.4
+                        labels: weightLabels,
+                        datasets: [{ 
+                            label: 'Berat (kg)', data: weightData, 
+                            borderColor: '#10b981', backgroundColor: gradientGreen, 
+                            fill: true, tension: 0.4, pointBackgroundColor: '#10b981', pointRadius: 4
                         }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false }
+                    options: { 
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false } } }
+                    }
                 });
-
             })
-            .catch(err => console.error("Gagal load data:", err));
+            .catch(err => {
+                if (err.message !== "Unauthorized") {
+                    showError("Koneksi Terputus", "Gagal mengambil data dari server.<br>Pastikan tunnel dan bot menyala.");
+                }
+            });
+        }
+
+        // --- 2. FORM LOG MAKANAN ---
+        document.getElementById('foodForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const btn = document.getElementById('submitFoodBtn');
+            const resultBox = document.getElementById('resultBox');
+            const fileInput = document.getElementById('foodImage');
+            const textInput = document.getElementById('foodText');
+
+            // Efek Loading di Tombol
+            btn.disabled = true;
+            btn.innerHTML = `<span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> Menganalisis...`;
+            resultBox.innerHTML = "";
+
+            const formData = new FormData();
+            if (fileInput.files.length > 0) formData.append("food_image", fileInput.files[0]);
+            if (textInput.value.trim() !== "") formData.append("food_text", textInput.value);
+
+            try {
+                const res = await fetch('/api/log_food', {
+                    method: 'POST',
+                    headers: { 'X-Telegram-Init-Data': initData },
+                    body: formData
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    resultBox.innerHTML = `
+                        <div class="result-success">
+                            <strong>✅ Berhasil Dicatat!</strong><br>
+                            🍽️ ${data.data.nama_makanan}<br>
+                            🔥 <b>${data.data.kalori} kcal</b> | 🍭 ${data.data.gula}g Gula
+                        </div>`;
+                    fileInput.value = "";
+                    textInput.value = "";
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                } else {
+                    resultBox.innerHTML = `<div class="result-error">❌ Gagal: ${data.detail || 'Server Error'}</div>`;
+                }
+            } catch (err) {
+                resultBox.innerHTML = `<div class="result-error">❌ Koneksi error ke server.</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<span>🚀</span> Catat Makanan`;
+            }
+        });
     </script>
 </body>
 </html>

@@ -9,13 +9,12 @@ from keyboards.menus import (
     tombol_kembali, buat_tombol_gender
 )
 from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard, clear_gym_wizard
-from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode
+from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode, cek_status_vip
 from database.db import get_db
 
 logger = logging.getLogger(__name__)
 router = Router()
 
-# LINK NGROK LU GW HARDCODE DI SINI
 WEBAPP_URL = "https://fifth-twiddle-richly.ngrok-free.dev"
 
 async def buat_ringkasan_dashboard(user_id):
@@ -52,8 +51,9 @@ async def kirim_sambutan(message: Message, state: FSMContext):
             return
             
         ringkasan = await buat_ringkasan_dashboard(user_id)
+        is_vip = await cek_status_vip(user_id)
         teks = f"Halo <b>{user['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
-        await message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
+        await message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
     except Exception as e:
         logger.error(f"[start] error: {e}")
 
@@ -113,12 +113,13 @@ async def callback_gender(callback: CallbackQuery):
         await clear_onboarding_wizard(user_id)
         
         ringkasan = await buat_ringkasan_dashboard(user_id)
+        is_vip = await cek_status_vip(user_id)
         teks = f"✅ Mantap! Data lu udah disimpen.\n\nHalo <b>{data['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try:
-            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
+            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
         except Exception:
-            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
+            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
             
     except Exception as e:
         logger.error(f"[callback_gender] error: {e}")
@@ -136,12 +137,13 @@ async def callback_menu_utama(callback: CallbackQuery, state: FSMContext):
         nama = user['nama'] if user else "Bro"
         
         ringkasan = await buat_ringkasan_dashboard(user_id)
+        is_vip = await cek_status_vip(user_id)
         teks = f"Halo <b>{nama}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try: 
-            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
+            await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
         except Exception: 
-            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL))
+            await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
     except Exception as e:
         logger.error(f"[menu_utama] error: {e}")
 
