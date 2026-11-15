@@ -184,6 +184,7 @@ async def proses_voice_note(teks):
             continue
     return None
 
+# --- FITUR CHAT PT AI (DIPERBARUI UNTUK MARKDOWN) ---
 async def chat_dengan_pt(user_id, pesan_baru):
     history = await ambil_chat_history(user_id)
     user = await get_user_profile(user_id)
@@ -192,6 +193,7 @@ async def chat_dengan_pt(user_id, pesan_baru):
     if user:
         profil_str = f"User bernama {user['nama']}, BB {user['berat']}kg, TB {user['tinggi']}cm, Umur {user['umur']}th."
     
+    # ✅ PROMPT BARU: Menyuruh AI pakai Markdown biar rapi
     system_prompt = (
         f"Kamu adalah Personal Trainer (PT) AI profesional, ramah, dan suportif. {profil_str} "
         "Tugasmu adalah menjawab pertanyaan user seputar gym, latihan (workout), nutrisi, diet, dan motivasi. "
@@ -199,7 +201,10 @@ async def chat_dengan_pt(user_id, pesan_baru):
         "Jawab dengan jelas, SINGKAT, dan to-the-point. MAKSIMAL 3 paragraf pendek atau 5 poin saja. "
         "DILARANG KERAS mengulang kata yang sama berkali-kali. Berhenti menjawab jika sudah selesai. "
         "Kalau user nanya di luar topik fitness/kesehatan, tolak dengan halus dan arahkan kembali ke topik gym. "
-        "ATURAN FORMAT: JANGAN pakai format markdown apapun (Dilarang pakai **, *, _, #, `). Tulis teks polos aja. Boleh pakai emoji."
+        "ATURAN FORMAT: WAJIB gunakan format Markdown agar mudah dibaca. "
+        "Gunakan **bold** untuk nama latihan, angka penting, atau poin utama. "
+        "Gunakan list (menggunakan tanda minus '- ') atau angka (1. 2. 3.) untuk daftar gerakan workout atau makanan. "
+        "Berikan jarak (enter dua kali) antar paragraf agar tidak menumpuk. Boleh pakai emoji."
     )
     
     messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": pesan_baru}]
@@ -208,7 +213,7 @@ async def chat_dengan_pt(user_id, pesan_baru):
     for model_name in model_prioritas:
         try:
             response = await groq_client.chat.completions.create(
-                messages=messages, model=model_name, temperature=0.3, max_tokens=512, frequency_penalty=0.8, presence_penalty=0.8
+                messages=messages, model=model_name, temperature=0.3, max_tokens=800, frequency_penalty=0.5, presence_penalty=0.5
             )
             hasil = response.choices[0].message.content.strip()
             if hasil: return hasil

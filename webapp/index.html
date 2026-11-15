@@ -4,142 +4,141 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GymMate Dashboard</title>
-    
-    <!-- Font Premium (Inter) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
+    <!-- LIBRARY PARSER MARKDOWN UNTUK CHAT PT AI -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    
     <style>
-        /* CSS VARIABLES & RESET */
         :root {
-            --bg-color: #0b0f19; /* Warna background deep space */
-            --card-bg: rgba(30, 41, 59, 0.6); /* Warna kaca */
+            --bg-color: #0b0f19;
+            --card-bg: rgba(30, 41, 59, 0.6);
             --card-border: rgba(255, 255, 255, 0.08);
             --text-main: #ffffff;
             --text-muted: #94a3b8;
             --accent-blue: #3b82f6;
             --accent-green: #10b981;
             --accent-red: #ef4444;
-            --gradient-btn: linear-gradient(135deg, #3b82f6, #8b5cf6); /* Biru ke ungu */
+            --gradient-btn: linear-gradient(135deg, #3b82f6, #8b5cf6);
         }
-
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background: radial-gradient(circle at top right, #1e293b, #0b0f19 70%); color: var(--text-main); min-height: 100vh; overflow-x: hidden; }
         
-        body { 
-            background: radial-gradient(circle at top right, #1e293b, #0b0f19 70%); 
-            color: var(--text-main); 
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        /* LOADING SCREEN */
-        #loading-screen { 
-            display: flex; flex-direction: column; justify-content: center; align-items: center; 
-            height: 100vh; color: var(--text-muted); 
-        }
-        .spinner { 
-            width: 50px; height: 50px; border: 4px solid rgba(59, 130, 246, 0.2); 
-            border-top-color: var(--accent-blue); border-radius: 50%; 
-            animation: spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite; margin-bottom: 20px;
-        }
+        #loading-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; color: var(--text-muted); }
+        .spinner { width: 50px; height: 50px; border: 4px solid rgba(59, 130, 246, 0.2); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite; margin-bottom: 20px; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
-        /* APP CONTAINER */
-        #app-container { display: none; padding-bottom: 90px; }
-        
+        #app-container { display: none; padding-top: 80px; padding-bottom: 110px; }
         .page { display: none; animation: fadeIn 0.3s ease-out; }
         .page.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
         .content { padding: 20px; }
 
-        /* HEADERS */
-        .header { margin-bottom: 24px; }
-        .header h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
-        .header p { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+        .top-header { position: fixed; top: 0; left: 0; right: 0; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--card-border); padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 99; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .profile-info { display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+        .profile-name { font-size: 16px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 5px; }
+        .profile-stats { font-size: 12px; color: var(--text-muted); }
+        .bmi-badge-sm { background: var(--accent-green); color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: bold; margin-left: 5px; }
+        .btn-edit-profile { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); border: 1px solid rgba(59, 130, 246, 0.3); padding: 8px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
 
-        /* CARDS (GLASSMORPHISM) */
-        .card { 
-            background: var(--card-bg); 
-            backdrop-filter: blur(16px); 
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--card-border); 
-            border-radius: 24px; 
-            padding: 20px; 
-            margin-bottom: 20px; 
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); 
-        }
+        .header-title { margin-bottom: 24px; }
+        .header-title h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+        .header-title p { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+
+        .card { background: var(--card-bg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--card-border); border-radius: 24px; padding: 20px; margin-bottom: 20px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); }
         .card h3 { font-size: 15px; font-weight: 600; color: var(--text-muted); margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
         
         .chart-container { position: relative; height: 200px; width: 100%; }
 
-        /* FORM & INPUTS */
+        .water-widget { display: flex; align-items: center; justify-content: space-between; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 16px; padding: 15px; margin-bottom: 20px; }
+        .water-info h4 { font-size: 14px; color: var(--accent-blue); margin-bottom: 5px; }
+        .water-info h2 { font-size: 24px; font-weight: 800; }
+        .water-info p { font-size: 12px; color: var(--text-muted); }
+        .water-icon { font-size: 40px; }
+
         .form-group { margin-bottom: 16px; }
         .form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
-        .form-control { 
-            width: 100%; padding: 16px; border-radius: 16px; 
-            background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); 
-            color: white; font-size: 15px; transition: all 0.2s ease;
-        }
+        .form-control { width: 100%; padding: 16px; border-radius: 16px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: white; font-size: 15px; transition: all 0.2s ease; }
         .form-control:focus { outline: none; border-color: var(--accent-blue); background: rgba(15, 23, 42, 0.9); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
         
-        /* CUSTOM FILE INPUT */
-        input[type="file"]::file-selector-button {
-            background: rgba(255,255,255,0.1); border: none; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; margin-right: 16px; transition: 0.2s;
-        }
-        input[type="file"]::file-selector-button:hover { background: rgba(255,255,255,0.2); }
+        input[type="file"]::file-selector-button { background: rgba(255,255,255,0.1); border: none; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; margin-right: 16px; transition: 0.2s; }
 
-        /* BUTTONS */
-        .btn-primary { 
-            width: 100%; padding: 18px; border: none; border-radius: 16px; 
-            background: var(--gradient-btn); color: white; 
-            font-size: 16px; font-weight: 700; cursor: pointer; 
-            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); 
-            transition: transform 0.1s ease, box-shadow 0.2s ease;
-            display: flex; justify-content: center; align-items: center; gap: 10px;
-        }
+        .btn-primary { width: 100%; padding: 16px; border: none; border-radius: 16px; background: var(--gradient-btn); color: white; font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); transition: transform 0.1s ease; display: flex; justify-content: center; align-items: center; gap: 10px; }
         .btn-primary:active { transform: scale(0.97); }
-        .btn-primary:disabled { background: #334155; box-shadow: none; cursor: not-allowed; transform: none; }
+        .btn-primary:disabled { background: #334155; box-shadow: none; cursor: not-allowed; }
 
-        /* BOTTOM NAVBAR (FLOATING) */
-        .navbar { 
-            position: fixed; bottom: 20px; left: 20px; right: 20px; 
-            background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            display: flex; justify-content: space-around; padding: 12px 0; 
-            border-radius: 24px; border: 1px solid var(--card-border); 
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5); z-index: 100;
-        }
-        .nav-btn { 
-            background: none; border: none; color: var(--text-muted); 
-            font-size: 12px; font-weight: 600; display: flex; flex-direction: column; align-items: center; 
-            cursor: pointer; transition: all 0.3s ease; width: 50%;
-        }
-        .nav-btn span { font-size: 22px; margin-bottom: 4px; transition: transform 0.2s ease; }
+        .navbar { position: fixed; bottom: 20px; left: 20px; right: 20px; background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(20px); display: flex; justify-content: space-between; padding: 12px 10px; border-radius: 24px; border: 1px solid var(--card-border); box-shadow: 0 10px 40px rgba(0,0,0,0.5); z-index: 100; }
+        .nav-btn { background: none; border: none; color: var(--text-muted); font-size: 10px; font-weight: 600; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.3s ease; flex: 1; padding: 0; }
+        .nav-btn span { font-size: 20px; margin-bottom: 3px; transition: transform 0.2s ease; }
         .nav-btn.active { color: var(--accent-blue); }
-        .nav-btn.active span { transform: translateY(-4px); }
+        .nav-btn.active span { transform: translateY(-3px); }
 
-        /* ERROR/ALERT BOX */
         #error-screen { text-align: center; padding: 40px 20px; display: none; }
         .alert-box { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); border-radius: 20px; padding: 30px; }
         .alert-box h2 { color: var(--accent-red); font-size: 22px; margin-bottom: 10px; }
-        
+
         .result-success { background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); border-radius: 12px; padding: 15px; font-size: 14px; margin-top: 15px; }
         .result-error { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); border-radius: 12px; padding: 15px; font-size: 14px; margin-top: 15px; }
+
+        .water-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .water-btn { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: white; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .water-btn:active { background: rgba(59, 130, 246, 0.3); }
+
+        .history-list { display: flex; flex-direction: column; gap: 10px; }
+        .history-item { display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.5); padding: 15px; border-radius: 12px; border: 1px solid var(--card-border); }
+        .history-icon { font-size: 24px; margin-right: 15px; }
+        .history-info { flex: 1; }
+        .history-info h4 { font-size: 14px; margin-bottom: 4px; }
+        .history-info p { font-size: 12px; color: var(--text-muted); }
+        .history-time { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+        
+        .btn-delete { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: none; padding: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 14px; margin-top: 5px; display: inline-block; }
+
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; }
+        .stat-card { background: rgba(15, 23, 42, 0.5); padding: 15px 5px; border-radius: 12px; border: 1px solid var(--card-border); }
+        .stat-card h4 { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+        .stat-card h2 { font-size: 20px; color: var(--accent-blue); }
+        
+        .equip-result { white-space: pre-wrap; font-size: 14px; color: var(--text-main); background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 12px; margin-top: 15px; line-height: 1.5; }
+
+        /* CHAT PT AI */
+        #page-chat { padding-bottom: 40px; }
+        .chat-container { display: flex; flex-direction: column; gap: 12px; min-height: 200px; }
+        .chat-empty { text-align: center; color: var(--text-muted); font-size: 14px; padding: 40px 20px; }
+        
+        .chat-bubble { max-width: 85%; padding: 14px 18px; border-radius: 18px; font-size: 14.5px; line-height: 1.6; word-wrap: break-word; }
+        .chat-bubble.user { align-self: flex-end; background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; border-bottom-right-radius: 4px; }
+        .chat-bubble.assistant { align-self: flex-start; background: rgba(30, 41, 59, 0.95); border: 1px solid var(--card-border); border-bottom-left-radius: 4px; }
+        
+        /* CSS UNTUK RENDER MARKDOWN DI DALAM BUBBLE CHAT */
+        .chat-bubble.assistant p { margin-bottom: 10px; }
+        .chat-bubble.assistant p:last-child { margin-bottom: 0; }
+        .chat-bubble.assistant strong { color: var(--accent-blue); font-weight: 700; }
+        .chat-bubble.assistant ul, .chat-bubble.assistant ol { padding-left: 20px; margin-bottom: 10px; }
+        .chat-bubble.assistant li { margin-bottom: 4px; }
+        .chat-bubble.assistant h1, .chat-bubble.assistant h2, .chat-bubble.assistant h3 { font-size: 16px; margin: 15px 0 8px 0; color: white; }
+
+        .chat-input-wrapper { position: fixed; bottom: 100px; left: 20px; right: 20px; display: flex; gap: 8px; background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(20px); padding: 8px; border-radius: 24px; border: 1px solid var(--card-border); box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 101; }
+        .chat-input-wrapper input { flex: 1; background: transparent; border: none; color: white; padding: 12px 16px; font-size: 15px; outline: none; min-width: 0; }
+        .chat-send-btn { background: var(--gradient-btn); border: none; color: white; width: 44px; height: 44px; min-width: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .chat-clear-btn { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.3); padding: 8px 14px; border-radius: 12px; font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 15px; }
+    
+        /* SUB-TABS NUTRISI */
+        .sub-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .sub-tab-btn { flex: 1; padding: 12px; border-radius: 12px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: var(--text-muted); font-weight: bold; cursor: pointer; }
+        .sub-tab-btn.active { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); border-color: var(--accent-blue); }
+
+        .btn-back { background: rgba(255,255,255,0.1); border: none; color: white; width: 40px; height: 40px; border-radius: 50%; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; }
+        .btn-back:active { transform: scale(0.9); background: rgba(255,255,255,0.2); }
     </style>
 </head>
 <body>
-
-    <!-- LOADING -->
-    <div id="loading-screen">
-        <div class="spinner"></div>
-        <div style="font-weight: 600; letter-spacing: 1px;">GYMMATE AI</div>
-    </div>
-
-    <!-- ERROR SCREEN -->
+    <div id="loading-screen"><div class="spinner"></div><div style="font-weight: 600; letter-spacing: 1px;">GYMMATE AI</div></div>
+    
     <div id="error-screen" class="content">
         <div class="alert-box">
             <h1 style="font-size: 50px; margin-bottom: 10px;">🔒</h1>
@@ -148,75 +147,201 @@
         </div>
     </div>
 
-    <!-- MAIN APP -->
     <div id="app-container">
         
-        <!-- TAB 1: DASHBOARD -->
-        <div id="page-dashboard" class="page active content">
-            <div class="header">
-                <h2>Dashboard</h2>
-                <p>Pantau progres harian lu bro.</p>
+        <div class="top-header" id="globalHeader" onclick="switchTab('profile', document.querySelector('.nav-btn'))">
+            <div class="profile-info">
+                <div class="profile-name">
+                    👋 <span id="headerName">Loading...</span>
+                    <span class="bmi-badge-sm" id="headerBmi">BMI</span>
+                </div>
+                <div class="profile-stats" id="headerStats">Tinggi | Berat</div>
             </div>
+            <button class="btn-edit-profile">⚙️ Profil</button>
+        </div>
+
+        <div id="page-dashboard" class="page active content">
+            <div class="header-title"><h2>Dashboard</h2><p>Pantau progres harian lu bro.</p></div>
             
+            <div class="water-widget">
+                <div class="water-info">
+                    <h4>💧 Air Minum Hari Ini</h4>
+                    <h2><span id="dashWaterVal">0</span> <span style="font-size: 16px; font-weight: 500; color: var(--text-muted);">/ 2000 ml</span></h2>
+                </div>
+                <div class="water-icon">🥤</div>
+            </div>
+
             <div class="card">
                 <h3>🔥 Kalori (Masuk vs Terbakar)</h3>
                 <div class="chart-container"><canvas id="calorieChart"></canvas></div>
             </div>
-            
             <div class="card">
                 <h3>⚖️ Tren Berat Badan</h3>
                 <div class="chart-container"><canvas id="weightChart"></canvas></div>
             </div>
         </div>
 
-        <!-- TAB 2: LOG MAKANAN -->
-        <div id="page-food" class="page content">
-            <div class="header">
-                <h2>Log Makanan</h2>
-                <p>Catat makanan pakai Foto atau Teks.</p>
-            </div>
+        <div id="page-nutrisi" class="page content">
+            <div class="header-title"><h2>Nutrisi & Hidrasi</h2><p>Catat asupan harian lu.</p></div>
             
-            <div class="card">
-                <form id="foodForm">
-                    <div class="form-group">
-                        <label>Upload Foto Makanan (Opsional)</label>
-                        <input type="file" id="foodImage" class="form-control" accept="image/*" capture="environment">
+            <div class="sub-tabs">
+                <button class="sub-tab-btn active" id="subTabFoodBtn" onclick="switchSubTab('food')">🍎 Makanan</button>
+                <button class="sub-tab-btn" id="subTabWaterBtn" onclick="switchSubTab('water')">💧 Air & Berat</button>
+            </div>
+
+            <div id="sub-page-food">
+                <div class="card">
+                    <h3>Catat Makanan</h3>
+                    <form id="foodForm">
+                        <div class="form-group">
+                            <label>Upload Foto Makanan (Opsional)</label>
+                            <input type="file" id="foodImage" class="form-control" accept="image/*" capture="environment">
+                        </div>
+                        <div class="form-group">
+                            <label>Atau Ketik Deskripsi</label>
+                            <input type="text" id="foodText" class="form-control" placeholder="Contoh: Nasi padang 1 porsi...">
+                        </div>
+                        <button type="submit" class="btn-primary" id="submitFoodBtn"><span>🚀</span> Catat Makanan</button>
+                    </form>
+                    <div id="resultBox"></div>
+                </div>
+            </div>
+
+            <div id="sub-page-water" style="display: none;">
+                <div class="card">
+                    <h3>💧 Minum Air</h3>
+                    <div class="water-grid">
+                        <button class="water-btn" onclick="logWater(250)">+250 ml</button>
+                        <button class="water-btn" onclick="logWater(500)">+500 ml</button>
+                        <button class="water-btn" style="grid-column: span 2;" onclick="logWater(1000)">+1 Liter</button>
                     </div>
-                    
-                    <div class="form-group">
-                        <label>Atau Ketik Deskripsi (Opsional)</label>
-                        <input type="text" id="foodText" class="form-control" placeholder="Contoh: Nasi padang 1 porsi...">
-                    </div>
-                    
-                    <button type="submit" class="btn-primary" id="submitFoodBtn">
-                        <span>🚀</span> Catat Makanan
-                    </button>
-                </form>
-                
-                <div id="resultBox"></div>
+                    <div id="waterResult" style="font-size: 14px; color: var(--accent-blue); text-align: center;"></div>
+                </div>
+
+                <div class="card">
+                    <h3>⚖️ Catat Berat Badan</h3>
+                    <form id="weightForm">
+                        <div class="form-group">
+                            <input type="number" step="0.1" id="weightInput" class="form-control" placeholder="Contoh: 70.5">
+                        </div>
+                        <button type="submit" class="btn-primary" id="submitWeightBtn"><span>💾</span> Simpan Berat</button>
+                    </form>
+                    <div id="weightResult"></div>
+                </div>
             </div>
         </div>
 
-        <!-- FLOATING NAVBAR -->
+        <div id="page-gym" class="page content">
+            <div class="header-title"><h2>Gym & Statistik</h2><p>Log latihan dan scan alat.</p></div>
+            
+            <div class="card">
+                <h3>📊 Statistik Total</h3>
+                <div class="stats-grid">
+                    <div class="stat-card"><h4>Makanan</h4><h2 id="statMakan">0</h2></div>
+                    <div class="stat-card"><h4>Air</h4><h2 id="statAir">0</h2></div>
+                    <div class="stat-card"><h4>Latihan</h4><h2 id="statGym">0</h2></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>💪 Catat Log Latihan</h3>
+                <form id="workoutForm">
+                    <div class="form-group">
+                        <input type="text" id="workoutText" class="form-control" placeholder="Contoh: lari 30 menit...">
+                    </div>
+                    <button type="submit" class="btn-primary" id="submitWorkoutBtn"><span>🔥</span> Simpan Latihan</button>
+                </form>
+                <div id="workoutResult"></div>
+            </div>
+
+            <div class="card">
+                <h3>🔍 Scan Alat Gym</h3>
+                <form id="equipForm">
+                    <div class="form-group">
+                        <label>Foto Alat Gym</label>
+                        <input type="file" id="equipImage" class="form-control" accept="image/*" capture="environment" required>
+                    </div>
+                    <button type="submit" class="btn-primary" id="submitEquipBtn"><span>📸</span> Analisis Alat</button>
+                </form>
+                <div id="equipResult" class="equip-result"></div>
+            </div>
+        </div>
+
+        <div id="page-history" class="page content">
+            <div class="header-title"><h2>Timeline Aktivitas</h2><p>Semua catatan lu hari ini.</p></div>
+            <div class="card">
+                <div id="historyList" class="history-list">
+                    <p style="text-align: center; color: var(--text-muted); font-size: 14px;">Memuat data...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-chat" class="page content">
+            <div class="header-title"><h2>PT AI Chat</h2><p>Tanya apapun soal fitness & nutrisi.</p></div>
+            <button class="chat-clear-btn" onclick="clearChat()">🗑️ Hapus Riwayat Chat</button>
+            <div id="chatContainer" class="chat-container">
+                <div class="chat-empty">Memuat chat...</div>
+            </div>
+        </div>
+
+        <div id="page-profile" class="page content" style="padding-bottom: 100px;">
+            <div class="header-title" style="display: flex; align-items: center; gap: 15px; margin-bottom: 24px;">
+                <button class="btn-back" onclick="switchTab('dashboard', document.getElementById('nav-btn-dash'))">⬅️</button>
+                <div>
+                    <h2 style="margin: 0; font-size: 22px;">Edit Profil</h2>
+                    <p style="margin: 0; font-size: 13px;">Perbarui data diri dan target lu.</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <form id="profileForm">
+                    <div class="form-group">
+                        <label>Berat Badan (kg)</label>
+                        <input type="number" step="0.1" id="profBerat" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Tinggi Badan (cm)</label>
+                        <input type="number" step="0.1" id="profTinggi" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Program</label>
+                        <select id="profTarget" class="form-control">
+                            <option value="recomp">Recomp (Maintain)</option>
+                            <option value="cutting">Cutting (Turun BB)</option>
+                            <option value="bulking">Bulking (Naik BB)</option>
+                            <option value="strength">Strength (Kekuatan)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary" id="submitProfileBtn"><span>💾</span> Update Profil</button>
+                </form>
+                <div id="profileResult"></div>
+            </div>
+        </div>
+
+        <div id="chatInputWrapper" class="chat-input-wrapper" style="display: none;">
+            <input type="text" id="chatInput" placeholder="Tanya PT AI..." />
+            <button class="chat-send-btn" id="chatSendBtn" onclick="sendChatMessage()">➤</button>
+        </div>
+
         <div class="navbar">
-            <button class="nav-btn active" onclick="switchTab('dashboard', this)">
-                <span>📈</span> Dashboard
-            </button>
-            <button class="nav-btn" onclick="switchTab('food', this)">
-                <span>🍎</span> Log Makanan
-            </button>
+            <button id="nav-btn-dash" class="nav-btn active" onclick="switchTab('dashboard', this)"><span>📈</span> Dash</button>
+            <button class="nav-btn" onclick="switchTab('nutrisi', this)"><span>🍏</span> Nutrisi</button>
+            <button class="nav-btn" onclick="switchTab('gym', this)"><span>💪</span> Gym</button>
+            <button class="nav-btn" onclick="switchTab('history', this)"><span>📜</span> Hist</button>
+            <button class="nav-btn" onclick="switchTab('chat', this)"><span>🤖</span> PT AI</button>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand(); 
-        tg.setHeaderColor('#0b0f19'); // Samain warna header Telegram
-        tg.setBackgroundColor('#0b0f19');
-        
+        tg.setHeaderColor('#0b0f19'); tg.setBackgroundColor('#0b0f19');
         const initData = tg.initData;
+        const headers = { 'X-Telegram-Init-Data': initData };
+
+        let calorieChartInstance = null;
+        let weightChartInstance = null;
         
-        // Fungsi Helper
         function showError(title, desc) {
             document.getElementById('loading-screen').style.display = 'none';
             document.getElementById('error-screen').style.display = 'block';
@@ -228,137 +353,406 @@
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.getElementById('page-' + tabName).classList.add('active');
-            btn.classList.add('active');
             
-            // Haptic feedback (Getar di HP)
+            if (btn && btn.classList.contains('nav-btn')) {
+                btn.classList.add('active');
+            }
+            
+            const chatInputWrapper = document.getElementById('chatInputWrapper');
+            chatInputWrapper.style.display = (tabName === 'chat') ? 'flex' : 'none';
+            
+            const globalHeader = document.getElementById('globalHeader');
+            globalHeader.style.display = (tabName === 'profile') ? 'none' : 'flex';
+            document.getElementById('app-container').style.paddingTop = (tabName === 'profile') ? '20px' : '80px';
+
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            
+            if (tabName === 'history') loadHistory();
+            if (tabName === 'dashboard' || tabName === 'nutrisi') refreshData(); 
+            if (tabName === 'gym') loadStats();
+            if (tabName === 'profile') loadProfile();
+            if (tabName === 'chat') loadChatHistory();
+        }
+
+        function switchSubTab(subTab) {
+            document.getElementById('sub-page-food').style.display = (subTab === 'food') ? 'block' : 'none';
+            document.getElementById('sub-page-water').style.display = (subTab === 'water') ? 'block' : 'none';
+            document.getElementById('subTabFoodBtn').classList.toggle('active', subTab === 'food');
+            document.getElementById('subTabWaterBtn').classList.toggle('active', subTab === 'water');
             if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
         }
 
-        // --- 1. INIT DATA & CHART ---
-        if (!initData) {
-            showError("Bukan dari Telegram", "Silakan buka Mini App ini dari dalam bot GymMate.");
-        } else {
-            fetch('/api/chart_data', { headers: { 'X-Telegram-Init-Data': initData } })
-            .then(res => {
-                if (res.status === 403 || res.status === 401) {
-                    showError("Akses VIP Diperlukan", "Fitur ini cuma buat member VIP.<br>Silakan balik ke bot dan upgrade akun lu.");
-                    throw new Error("Unauthorized");
-                }
-                if (!res.ok) throw new Error("Server Error");
-                return res.json();
-            })
-            .then(data => {
-                if (!data) return;
-                document.getElementById('loading-screen').style.display = 'none';
-                document.getElementById('app-container').style.display = 'block';
+        async function refreshData() {
+            try {
+                const res = await fetch('/api/chart_data', { headers });
+                if (res.status === 403 || res.status === 401) { showError("Akses VIP", "Silakan upgrade dulu."); throw new Error("Unauth"); }
+                const data = await res.json();
                 
-                // GLOBAL CHART DEFAULTS (Biar fontnya rapi)
-                Chart.defaults.color = '#94a3b8';
-                Chart.defaults.font.family = "'Inter', sans-serif";
-                Chart.defaults.font.weight = '500';
-
-                // --- CHART KALORI (BATANG) ---
-                const ctxCal = document.getElementById('calorieChart').getContext('2d');
-                // Bikin efek gradien batang
-                let gradientBlue = ctxCal.createLinearGradient(0, 0, 0, 200);
-                gradientBlue.addColorStop(0, 'rgba(59, 130, 246, 1)');
-                gradientBlue.addColorStop(1, 'rgba(59, 130, 246, 0.2)');
-
-                new Chart(ctxCal, {
-                    type: 'bar',
-                    data: {
-                        labels: data.daily.map(i => i.tanggal),
-                        datasets: [
-                            { label: 'Masuk', data: data.daily.map(i => i.total_kalori_masuk), backgroundColor: gradientBlue, borderRadius: 8, borderSkipped: false },
-                            { label: 'Terbakar', data: data.daily.map(i => i.total_kalori_keluar), backgroundColor: '#ef4444', borderRadius: 8, borderSkipped: false }
-                        ]
-                    },
-                    options: { 
-                        responsive: true, maintainAspectRatio: false, 
-                        plugins: { legend: { position: 'top', labels: { boxWidth: 10, usePointStyle: true } } },
-                        scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false } } }
-                    }
-                });
-
-                // --- CHART BERAT BADAN (GARIS) ---
-                const weightLabels = data.weight.length > 0 ? data.weight.map(i => i.tanggal) : ['Belum ada data'];
-                const weightData = data.weight.length > 0 ? data.weight.map(i => i.berat) : [0];
-                
-                const ctxWeight = document.getElementById('weightChart').getContext('2d');
-                let gradientGreen = ctxWeight.createLinearGradient(0, 0, 0, 200);
-                gradientGreen.addColorStop(0, 'rgba(16, 185, 129, 0.5)');
-                gradientGreen.addColorStop(1, 'rgba(16, 185, 129, 0)');
-
-                new Chart(ctxWeight, {
-                    type: 'line',
-                    data: {
-                        labels: weightLabels,
-                        datasets: [{ 
-                            label: 'Berat (kg)', data: weightData, 
-                            borderColor: '#10b981', backgroundColor: gradientGreen, 
-                            fill: true, tension: 0.4, pointBackgroundColor: '#10b981', pointRadius: 4
-                        }]
-                    },
-                    options: { 
-                        responsive: true, maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false } } }
-                    }
-                });
-            })
-            .catch(err => {
-                if (err.message !== "Unauthorized") {
-                    showError("Koneksi Terputus", "Gagal mengambil data dari server.<br>Pastikan tunnel dan bot menyala.");
+                if(data.daily && data.daily.length > 0) {
+                    const todayData = data.daily[data.daily.length - 1];
+                    document.getElementById('dashWaterVal').innerText = todayData.total_air;
                 }
+                renderCharts(data);
+            } catch (err) { console.error(err); }
+        }
+
+        function renderCharts(data) {
+            if (calorieChartInstance) calorieChartInstance.destroy();
+            if (weightChartInstance) weightChartInstance.destroy();
+
+            Chart.defaults.color = '#94a3b8'; Chart.defaults.font.family = "'Inter', sans-serif";
+            
+            const ctxCal = document.getElementById('calorieChart').getContext('2d');
+            let gradientBlue = ctxCal.createLinearGradient(0, 0, 0, 200);
+            gradientBlue.addColorStop(0, 'rgba(59, 130, 246, 1)'); gradientBlue.addColorStop(1, 'rgba(59, 130, 246, 0.2)');
+
+            calorieChartInstance = new Chart(ctxCal, {
+                type: 'bar', data: { labels: data.daily.map(i => i.tanggal), datasets: [{ label: 'Masuk', data: data.daily.map(i => i.total_kalori_masuk), backgroundColor: gradientBlue, borderRadius: 8 }, { label: 'Terbakar', data: data.daily.map(i => i.total_kalori_keluar), backgroundColor: '#ef4444', borderRadius: 8 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { boxWidth: 10 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } } }
+            });
+
+            const ctxWeight = document.getElementById('weightChart').getContext('2d');
+            let gradientGreen = ctxWeight.createLinearGradient(0, 0, 0, 200);
+            gradientGreen.addColorStop(0, 'rgba(16, 185, 129, 0.5)'); gradientGreen.addColorStop(1, 'rgba(16, 185, 129, 0)');
+            
+            weightChartInstance = new Chart(ctxWeight, {
+                type: 'line', data: { labels: data.weight.length ? data.weight.map(i => i.tanggal) : ['Kosong'], datasets: [{ label: 'Berat', data: data.weight.length ? data.weight.map(i => i.berat) : [0], borderColor: '#10b981', backgroundColor: gradientGreen, fill: true, tension: 0.4 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } } }
             });
         }
 
-        // --- 2. FORM LOG MAKANAN ---
-        document.getElementById('foodForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const btn = document.getElementById('submitFoodBtn');
-            const resultBox = document.getElementById('resultBox');
-            const fileInput = document.getElementById('foodImage');
-            const textInput = document.getElementById('foodText');
-
-            // Efek Loading di Tombol
-            btn.disabled = true;
-            btn.innerHTML = `<span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> Menganalisis...`;
-            resultBox.innerHTML = "";
-
-            const formData = new FormData();
-            if (fileInput.files.length > 0) formData.append("food_image", fileInput.files[0]);
-            if (textInput.value.trim() !== "") formData.append("food_text", textInput.value);
-
+        async function loadStats() {
             try {
-                const res = await fetch('/api/log_food', {
-                    method: 'POST',
-                    headers: { 'X-Telegram-Init-Data': initData },
-                    body: formData
-                });
-                
+                const res = await fetch('/api/get_stats', { headers });
+                const data = await res.json();
+                document.getElementById('statMakan').innerText = data.stats.makanan || 0;
+                document.getElementById('statAir').innerText = data.stats.air || 0;
+                document.getElementById('statGym').innerText = data.stats.gym || 0;
+            } catch (err) { console.error("Gagal load stats:", err); }
+        }
+
+        async function loadProfile() {
+            try {
+                const res = await fetch('/api/profile', { headers });
+                if (!res.ok) throw new Error("Gagal load profil");
                 const data = await res.json();
                 
+                document.getElementById('headerName').innerText = data.nama || "Bro";
+                document.getElementById('headerStats').innerText = `${data.umur} th | ${data.tinggi} cm | ${data.berat} kg`;
+                document.getElementById('headerBmi').innerText = `BMI: ${data.bmi}`;
+                
+                document.getElementById('profBerat').value = data.berat;
+                document.getElementById('profTinggi').value = data.tinggi;
+                document.getElementById('profTarget').value = data.target;
+            } catch (err) { console.error("Gagal load profile:", err); }
+        }
+
+        if (!initData) {
+            showError("Bukan dari Telegram", "Silakan buka Mini App ini dari dalam bot GymMate.");
+        } else {
+            loadProfile();
+            refreshData();
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+        }
+
+        document.getElementById('foodForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitFoodBtn'), resBox = document.getElementById('resultBox');
+            btn.disabled = true; btn.innerHTML = `<span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> Proses...`;
+            resBox.innerHTML = "";
+            const formData = new FormData();
+            if (document.getElementById('foodImage').files.length) formData.append("food_image", document.getElementById('foodImage').files[0]);
+            if (document.getElementById('foodText').value.trim()) formData.append("food_text", document.getElementById('foodText').value);
+
+            try {
+                const res = await fetch('/api/log_food', { method: 'POST', headers, body: formData });
+                const data = await res.json();
                 if (res.ok) {
-                    resultBox.innerHTML = `
-                        <div class="result-success">
-                            <strong>✅ Berhasil Dicatat!</strong><br>
-                            🍽️ ${data.data.nama_makanan}<br>
-                            🔥 <b>${data.data.kalori} kcal</b> | 🍭 ${data.data.gula}g Gula
-                        </div>`;
+                    resBox.innerHTML = `<div class="result-success">✅ <b>Berhasil!</b><br>🍽️ ${data.data.nama_makanan}<br>🔥 <b>${data.data.kalori} kcal</b></div>`;
+                    document.getElementById('foodImage').value = "";
+                    document.getElementById('foodText').value = "";
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    refreshData(); 
+                } else { resBox.innerHTML = `<div class="result-error">❌ Gagal: ${data.detail}</div>`; }
+            } catch (err) { resBox.innerHTML = `<div class="result-error">❌ Koneksi error.</div>`; }
+            finally { btn.disabled = false; btn.innerHTML = `<span>🚀</span> Catat Makanan`; }
+        });
+
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitProfileBtn'), resBox = document.getElementById('profileResult');
+            btn.disabled = true; btn.innerHTML = `<span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> Menyimpan...`;
+            resBox.innerHTML = "";
+
+            const data = {
+                berat: document.getElementById('profBerat').value,
+                tinggi: document.getElementById('profTinggi').value,
+                target: document.getElementById('profTarget').value
+            };
+
+            try {
+                const res = await fetch('/api/profile', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                if (res.ok) {
+                    resBox.innerHTML = `<div class="result-success">✅ Profil berhasil di-update!</div>`;
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    loadProfile();
+                    refreshData();
+                } else {
+                    const err = await res.json();
+                    resBox.innerHTML = `<div class="result-error">❌ Gagal: ${err.detail}</div>`;
+                }
+            } catch (err) { resBox.innerHTML = `<div class="result-error">❌ Koneksi error.</div>`; }
+            finally { btn.disabled = false; btn.innerHTML = `<span>💾</span> Update Profil`; }
+        });
+
+        document.getElementById('equipForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitEquipBtn'), resBox = document.getElementById('equipResult');
+            const fileInput = document.getElementById('equipImage');
+            
+            if (!fileInput.files.length) return;
+            
+            btn.disabled = true; btn.innerHTML = `<span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> Menganalisis...`;
+            resBox.innerHTML = "Sedang mengenali alat...";
+
+            const formData = new FormData();
+            formData.append("equipment_image", fileInput.files[0]);
+
+            try {
+                const res = await fetch('/api/scan_equipment', { method: 'POST', headers, body: formData });
+                const data = await res.json();
+                if (res.ok) {
+                    resBox.innerHTML = `✅ <b>Hasil Analisis:</b><br><br>${data.data}`;
                     fileInput.value = "";
-                    textInput.value = "";
                     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                 } else {
-                    resultBox.innerHTML = `<div class="result-error">❌ Gagal: ${data.detail || 'Server Error'}</div>`;
+                    resBox.innerHTML = `❌ Gagal: ${data.detail}`;
                 }
+            } catch (err) { resBox.innerHTML = `❌ Koneksi error.`; }
+            finally { btn.disabled = false; btn.innerHTML = `<span>📸</span> Analisis Alat`; }
+        });
+
+        async function logWater(ml) {
+            const resBox = document.getElementById('waterResult');
+            resBox.innerText = "Menyimpan...";
+            try {
+                const res = await fetch('/api/log_water', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ ml: ml }) });
+                if (res.ok) {
+                    resBox.innerText = `✅ Berhasil +${ml}ml!`;
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    refreshData(); 
+                    setTimeout(() => resBox.innerText = "", 2000);
+                } else { resBox.innerText = "❌ Gagal."; }
+            } catch (err) { resBox.innerText = "❌ Error."; }
+        }
+
+        document.getElementById('weightForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitWeightBtn'), resBox = document.getElementById('weightResult');
+            const berat = document.getElementById('weightInput').value;
+            if (!berat) return;
+
+            btn.disabled = true; btn.innerHTML = "Menyimpan...";
+            try {
+                const res = await fetch('/api/log_weight', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ berat: berat }) });
+                if (res.ok) {
+                    resBox.innerHTML = `<div class="result-success">✅ Berat ${berat} kg disimpan!</div>`;
+                    document.getElementById('weightInput').value = "";
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    refreshData();
+                    loadProfile(); 
+                } else { resBox.innerHTML = `<div class="result-error">❌ Gagal.</div>`; }
+            } catch (err) { resBox.innerHTML = `<div class="result-error">❌ Error.</div>`; }
+            finally { btn.disabled = false; btn.innerHTML = `<span>💾</span> Simpan Berat`; }
+        });
+
+        document.getElementById('workoutForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitWorkoutBtn'), resBox = document.getElementById('workoutResult');
+            const teks = document.getElementById('workoutText').value;
+            if (!teks) return;
+
+            btn.disabled = true; btn.innerHTML = `<span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> Menganalisis...`;
+            resBox.innerHTML = "";
+
+            try {
+                const res = await fetch('/api/log_workout', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ teks: teks }) });
+                const data = await res.json();
+                if (res.ok) {
+                    resBox.innerHTML = `<div class="result-success">✅ <b>Tercatat!</b><br>🏃 ${data.data.olahraga}<br>⏳ ${data.data.durasi} mnt | 🔥 <b>${data.data.kalori} kcal</b></div>`;
+                    document.getElementById('workoutText').value = "";
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    loadStats(); 
+                    refreshData(); 
+                } else { resBox.innerHTML = `<div class="result-error">❌ Gagal: ${data.detail}</div>`; }
+            } catch (err) { resBox.innerHTML = `<div class="result-error">❌ Koneksi error.</div>`; }
+            finally { btn.disabled = false; btn.innerHTML = `<span>🔥</span> Simpan Latihan`; }
+        });
+
+        async function loadHistory() {
+            const list = document.getElementById('historyList');
+            list.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Memuat timeline...</p>';
+            try {
+                const res = await fetch('/api/unified_history', { headers });
+                const data = await res.json();
+                
+                if (!data.history || data.history.length === 0) {
+                    list.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Belum ada aktivitas hari ini.</p>';
+                    return;
+                }
+                
+                list.innerHTML = "";
+                data.history.forEach(item => {
+                    let icon = "📝";
+                    let color = "#fff";
+                    let subtext = "";
+                    
+                    if (item.type === 'food') { icon = "🍽️"; color = "var(--accent-blue)"; subtext = `${item.value} kcal`; }
+                    else if (item.type === 'water') { icon = "💧"; color = "#0ea5e9"; subtext = `+${item.value} ml`; }
+                    else if (item.type === 'weight') { icon = "⚖️"; color = "var(--accent-green)"; subtext = `${item.value} kg`; }
+
+                    list.innerHTML += `
+                        <div class="history-item">
+                            <div class="history-icon">${icon}</div>
+                            <div class="history-info">
+                                <h4 style="color: ${color};">${item.title}</h4>
+                                <p>${subtext}</p>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                                <div class="history-time">${item.waktu || '--:--'}</div>
+                                <button class="btn-delete" onclick="deleteLog('${item.type}', ${item.id})">🗑️</button>
+                            </div>
+                        </div>
+                    `;
+                });
             } catch (err) {
-                resultBox.innerHTML = `<div class="result-error">❌ Koneksi error ke server.</div>`;
+                list.innerHTML = '<p style="text-align: center; color: var(--accent-red);">Gagal memuat timeline.</p>';
+            }
+        }
+
+        async function deleteLog(type, id) {
+            if (!confirm("Yakin mau hapus catatan ini?")) return;
+            try {
+                const res = await fetch(`/api/delete_log/${type}/${id}`, { method: 'DELETE', headers });
+                if (res.ok) {
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    loadHistory(); 
+                    refreshData(); 
+                    loadStats();
+                    loadProfile();
+                } else { alert("Gagal menghapus."); }
+            } catch (err) { alert("Koneksi error."); }
+        }
+
+        // ==========================================
+        // CHAT PT AI (SUDAH DIPERBARUI UNTUK MARKDOWN)
+        // ==========================================
+        async function loadChatHistory() {
+            const container = document.getElementById('chatContainer');
+            container.innerHTML = '<div class="chat-empty">Memuat chat...</div>';
+            try {
+                const res = await fetch('/api/chat/history', { headers });
+                const data = await res.json();
+                
+                if (!data.history || data.history.length === 0) {
+                    container.innerHTML = '<div class="chat-empty">👋 Belum ada percakapan.<br>Tanya apa aja ke PT AI di bawah!</div>';
+                    return;
+                }
+                
+                container.innerHTML = "";
+                data.history.forEach(msg => {
+                    appendChatBubble(msg.role, msg.content);
+                });
+                scrollChatToBottom();
+            } catch (err) {
+                container.innerHTML = '<div class="chat-empty" style="color: var(--accent-red);">Gagal memuat chat.</div>';
+            }
+        }
+
+        function appendChatBubble(role, text) {
+            const container = document.getElementById('chatContainer');
+            const bubble = document.createElement('div');
+            bubble.className = `chat-bubble ${role}`;
+            
+            // --- PERUBAHAN UTAMA DISINI ---
+            if (role === 'assistant') {
+                // Render markdown ke HTML menggunakan marked.js
+                bubble.innerHTML = marked.parse(text);
+            } else {
+                // User chat pakai textContent aja biar aman dari HTML injection
+                bubble.textContent = text;
+            }
+            
+            container.appendChild(bubble);
+        }
+
+        function scrollChatToBottom() {
+            const container = document.getElementById('chatContainer');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const btn = document.getElementById('chatSendBtn');
+            const pesan = input.value.trim();
+            if (!pesan) return;
+            
+            appendChatBubble('user', pesan);
+            input.value = "";
+            scrollChatToBottom();
+            
+            btn.disabled = true;
+            const container = document.getElementById('chatContainer');
+            const loadingBubble = document.createElement('div');
+            loadingBubble.className = 'chat-bubble assistant';
+            loadingBubble.id = 'loadingBubble';
+            loadingBubble.innerHTML = '🤔 <em>PT AI sedang mengetik...</em>';
+            container.appendChild(loadingBubble);
+            scrollChatToBottom();
+            
+            try {
+                const res = await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pesan: pesan })
+                });
+                const data = await res.json();
+                
+                const lb = document.getElementById('loadingBubble');
+                if (lb) lb.remove();
+                
+                if (res.ok) {
+                    appendChatBubble('assistant', data.response);
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                } else {
+                    appendChatBubble('assistant', '❌ Gagal: ' + (data.detail || 'Error tidak diketahui'));
+                }
+                scrollChatToBottom();
+            } catch (err) {
+                const lb = document.getElementById('loadingBubble');
+                if (lb) lb.remove();
+                appendChatBubble('assistant', '❌ Koneksi error. Coba lagi.');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `<span>🚀</span> Catat Makanan`;
             }
+        }
+
+        async function clearChat() {
+            if (!confirm("Yakin mau hapus SEMUA riwayat chat dengan PT AI?")) return;
+            try {
+                const res = await fetch('/api/chat/clear', { method: 'DELETE', headers });
+                if (res.ok) {
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    loadChatHistory();
+                } else {
+                    alert("Gagal menghapus chat.");
+                }
+            } catch (err) { alert("Koneksi error."); }
+        }
+
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendChatMessage();
         });
     </script>
 </body>

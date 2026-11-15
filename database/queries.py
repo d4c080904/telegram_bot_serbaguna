@@ -202,8 +202,15 @@ async def get_history_makanan_hari_ini(user_id):
     try:
         async with await get_db() as conn:
             tanggal_ini = datetime.date.today()
-            return await conn.fetch("SELECT nama_makanan, estimasi_porsi, kalori, gula, waktu FROM food_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id ASC", str(user_id), tanggal_ini)
+            return await conn.fetch("SELECT id, nama_makanan, estimasi_porsi, kalori, gula, waktu FROM food_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id DESC", str(user_id), tanggal_ini)
     except Exception as e: logger.error(f"get_history error: {e}"); return []
+
+async def hapus_food_log_by_id(user_id, log_id):
+    try:
+        async with await get_db() as conn:
+            result = await conn.execute('''DELETE FROM food_logs WHERE id = $1 AND user_id = $2''', int(log_id), str(user_id))
+            return int(result.split(" ")[1]) > 0
+    except Exception as e: logger.error(f"hapus_food_log_by_id error: {e}"); return False
 
 async def hapus_log_terakhir(user_id):
     try:
@@ -316,7 +323,6 @@ async def get_history_workout_hari_ini(user_id):
         logger.error(f"get_history_workout error: {e}")
         return []
 
-# --- FUNGSI BARU ENTERPRISE SCHEMA ---
 async def get_daily_logs(user_id, tanggal_str):
     try:
         async with await get_db() as conn:
@@ -339,7 +345,6 @@ async def set_user_premium(user_id, days):
         logger.error(f"set_user_premium error: {e}")
         return False
 
-# --- FUNGSI PREMIUM & PAYMENT ---
 async def get_user_premium_status(user_id):
     try:
         async with await get_db() as conn:
@@ -377,7 +382,6 @@ async def aktifkan_premium(user_id, days=30):
         logger.error(f"aktifkan_premium error: {e}")
         return False
 
-# --- FUNGSI BARU VIP GATING ---
 async def cek_status_vip(user_id):
     try:
         async with await get_db() as conn:
@@ -388,4 +392,86 @@ async def cek_status_vip(user_id):
             return False
     except Exception as e:
         logger.error(f"cek_status_vip error: {e}")
+        return False
+
+async def get_unified_history(user_id):
+    try:
+        async with await get_db() as conn:
+            tanggal_ini = datetime.date.today()
+            
+            food = await conn.fetch('''
+                SELECT id, 'food' as type, nama_makanan as title, kalori as value, waktu 
+                FROM food_logs WHERE user_id = $1 AND tanggal = $2
+            ''', str(user_id), tanggal_ini)
+            
+            water = await conn.fetch('''
+                SELECT id, 'water' as type, 'Air Minum' as title, ml as value, waktu 
+                FROM water_logs WHERE user_id = $1 AND tanggal = $2
+            ''', str(user_id), tanggal_ini)
+            
+            weight = await conn.fetch('''
+                SELECT id, 'weight' as type, 'Timbang Berat' as title, berat as value, waktu 
+                FROM weight_logs WHERE user_id = $1 AND tanggal = $2
+            ''', str(user_id), tanggal_ini)
+            
+            all_logs = list(food) + list(water) + list(weight)
+            all_logs.sort(key=lambda x: x['waktu'] or datetime.datetime.min, reverse=True)
+            
+            result = []
+            for row in all_logs:
+                r = dict(row)
+                if r['waktu']: r['waktu'] = r['waktu'].strftime("%H:%M")
+                result.append(r)
+                
+            return result
+    except Exception as e:
+        logger.error(f"get_unified_history error: {e}")
+        return []
+
+async def hapus_water_log_by_id(user_id, log_id):
+    try:
+        async with await get_db() as conn:
+            result = await conn.execute('''DELETE FROM water_logs WHERE id = $1 AND user_id = $2''', int(log_id), str(user_id))
+            return int(result.split(" ")[1]) > 0
+    except Exception as e: logger.error(f"hapus_water_log_by_id error: {e}"); return False
+
+async def hapus_weight_log_by_id(user_id, log_id):
+    try:
+        async with await get_db() as conn:
+            result = await conn.execute('''DELETE FROM weight_logs WHERE id = $1 AND user_id = $2''', int(log_id), str(user_id))
+            return int(result.split(" ")[1]) > 0
+    except Exception as e: logger.error(f"hapus_weight_log_by_id error: {e}"); return False
+
+async def get_statistik_user(user_id):
+    try:
+        async with await get_db() as conn:
+            jumlah_makan = await conn.fetchval("SELECT COUNT(*) FROM food_logs WHERE user_id = $1", str(user_id))
+            jumlah_air = await conn.fetchval("SELECT COUNT(*) FROM water_logs WHERE user_id = $1", str(user_id))
+            jumlah_gym = await conn.fetchval("SELECT COUNT(*) FROM workout_logs WHERE user_id = $1", str(user_id))
+            return {
+                "makanan": jumlah_makan,
+                "air": jumlah_air,
+                "gym": jumlah_gym
+            }
+    except Exception as e:
+        logger.error(f"get_statistik_user error: {e}")
+        return {"makanan": 0, "air": 0, "gym": 0}
+
+# --- FUNGSI BARU: UPDATE PROFIL DARI WEB ---
+async def update_profile_web(user_id, berat, tinggi, target):
+    try:
+        async with await get_db() as conn:
+            # 1. Update data fisik
+            await conn.execute('''UPDATE user_profiles SET berat = $1, tinggi = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3''', float(berat), float(tinggi), str(user_id))
+            
+            # 2. Insert ke weight_logs (biar grafik update)
+            tanggal_ini = datetime.date.today()
+            await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
+            
+            # 3. Update target di gym_profile
+            await conn.execute('''UPDATE gym_profile SET target = $1 WHERE user_id = $2''', target, str(user_id))
+            
+            return True
+    except Exception as e:
+        logger.error(f"update_profile_web error: {e}")
         return False

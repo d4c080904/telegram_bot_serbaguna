@@ -18,18 +18,22 @@ from handlers import meal_planner as meal_router
 from handlers import export as export_router 
 from handlers import voice as voice_router
 from handlers import barcode as barcode_router
-from handlers import premium as premium_router # <--- IMPORT ROUTER PREMIUM
+from handlers import premium as premium_router
 from handlers import router as main_router 
 from services.ai import init_models
 
-# Setup Logging
+# ✅ IMPORT MIDDLEWARE BARU
+from middlewares.premium_gate import PremiumGateMiddleware
+
+# --- SETUP LOGGING ---
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[logging.FileHandler('bot.log', encoding='utf-8'), logging.StreamHandler()]
 )
-logger = logging.getLogger(__name__)
+# INI YANG KURANG TADI BRO
+logger = logging.getLogger(__name__) 
 
 async def set_bot_commands(bot: Bot):
     commands = [
@@ -50,6 +54,10 @@ async def main():
     await init_models()
     await set_bot_commands(bot)
     
+    # ✅ DAFTARIN MIDDLEWARE PREMIUM GATE DI SINI
+    dp.message.middleware(PremiumGateMiddleware())
+    dp.callback_query.middleware(PremiumGateMiddleware())
+    
     # DAFTARIN ROUTER
     dp.include_router(start_router.router)
     dp.include_router(calorie_router.router)
@@ -61,7 +69,7 @@ async def main():
     dp.include_router(export_router.router)
     dp.include_router(voice_router.router)
     dp.include_router(barcode_router.router)
-    dp.include_router(premium_router.router) # <--- DAFTARIN DI SINI
+    dp.include_router(premium_router.router)
     dp.include_router(main_router.router) 
     
     logger.info("✅ Semua Router berhasil didaftarkan.")
