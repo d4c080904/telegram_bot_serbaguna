@@ -457,21 +457,53 @@ async def get_statistik_user(user_id):
         logger.error(f"get_statistik_user error: {e}")
         return {"makanan": 0, "air": 0, "gym": 0}
 
-# --- FUNGSI BARU: UPDATE PROFIL DARI WEB ---
 async def update_profile_web(user_id, berat, tinggi, target):
     try:
         async with await get_db() as conn:
-            # 1. Update data fisik
             await conn.execute('''UPDATE user_profiles SET berat = $1, tinggi = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3''', float(berat), float(tinggi), str(user_id))
             
-            # 2. Insert ke weight_logs (biar grafik update)
             tanggal_ini = datetime.date.today()
             await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
             
-            # 3. Update target di gym_profile
             await conn.execute('''UPDATE gym_profile SET target = $1 WHERE user_id = $2''', target, str(user_id))
             
             return True
     except Exception as e:
         logger.error(f"update_profile_web error: {e}")
+        return False
+
+# ==========================================
+# --- FUNGSI BARU: SISTEM IZIN AKSES (INVITE ONLY) ---
+# ==========================================
+async def request_access_db(user_id, username):
+    try:
+        async with await get_db() as conn:
+            # Daftarin user ke tabel users (kalau belum ada)
+            await conn.execute('''
+                INSERT INTO users (user_id, nama) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING
+            ''', str(user_id), username)
+            return True
+    except Exception as e:
+        logger.error(f"request_access_db error: {e}")
+        return False
+
+async def approve_user_access(user_id, days=3):
+    try:
+        async with await get_db() as conn:
+            # Beri akses premium (trial) selama X hari
+            await conn.execute('''
+                UPDATE users SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval WHERE user_id = $2
+            ''', str(days), str(user_id))
+            return True
+    except Exception as e:
+        logger.error(f"approve_user_access error: {e}")
+        return False
+
+async def reject_user_access(user_id):
+    try:
+        async with await get_db() as conn:
+            await conn.execute('DELETE FROM users WHERE user_id = $1', str(user_id))
+            return True
+    except Exception as e:
+        logger.error(f"reject_user_access error: {e}")
         return False

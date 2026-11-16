@@ -6,6 +6,10 @@ load_dotenv()
 # --- API KEYS ---
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# ✅ TAMBAHAN: ID Admin untuk Izin Akses
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
 # Validasi
 if not TELEGRAM_TOKEN:
@@ -36,6 +40,3 @@ BROWSER_HEADERS = {
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
-import os
-
-DATABASE_URL = os.getenv("DATABASE_URL")

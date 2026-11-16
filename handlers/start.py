@@ -3,6 +3,7 @@ from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from keyboards.menus import (
     buat_menu_utama, teks_menu_utama, 
@@ -11,10 +12,12 @@ from keyboards.menus import (
 from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard, clear_gym_wizard
 from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode, cek_status_vip
 from database.db import get_db
+from config import ADMIN_ID
 
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Pastiin URL ini sesuai sama URL ngrok lu
 WEBAPP_URL = "https://fifth-twiddle-richly.ngrok-free.dev"
 
 async def buat_ringkasan_dashboard(user_id):
@@ -50,8 +53,23 @@ async def kirim_sambutan(message: Message, state: FSMContext):
             await message.answer("Halo bro! 👋 Sebelum mulai, kenalin diri lu dulu ya.\n\nSiapa <b>nama panggilan</b> lu?", parse_mode="HTML")
             return
             
+        # ✅ FIX LOGIKA ADMIN: Admin otomatis dianggap VIP
+        is_vip_db = await cek_status_vip(user_id)
+        is_admin = (user_id == str(ADMIN_ID))
+        is_vip = is_vip_db or is_admin 
+
+        if not is_vip:
+            builder = InlineKeyboardBuilder()
+            builder.button(text="🔓 Minta Izin Akses", callback_data="req_access")
+            await message.answer(
+                "🔒 <b>AKSES TERBATAS</b>\n\n"
+                "Bot ini masih dalam tahap uji coba terbatas.\n"
+                "Silakan minta izin akses ke Admin untuk bisa menggunakan bot ini.",
+                reply_markup=builder.as_markup()
+            )
+            return
+
         ringkasan = await buat_ringkasan_dashboard(user_id)
-        is_vip = await cek_status_vip(user_id)
         teks = f"Halo <b>{user['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         await message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
     except Exception as e:
@@ -113,7 +131,19 @@ async def callback_gender(callback: CallbackQuery):
         await clear_onboarding_wizard(user_id)
         
         ringkasan = await buat_ringkasan_dashboard(user_id)
-        is_vip = await cek_status_vip(user_id)
+        
+        # ✅ FIX LOGIKA ADMIN: Admin otomatis dianggap VIP
+        is_vip_db = await cek_status_vip(user_id)
+        is_admin = (user_id == str(ADMIN_ID))
+        is_vip = is_vip_db or is_admin
+
+        if not is_vip:
+            builder = InlineKeyboardBuilder()
+            builder.button(text="🔓 Minta Izin Akses", callback_data="req_access")
+            teks = f"✅ Mantap! Data lu udah disimpen.\n\nTapi untuk masuk, lu harus minta izin Admin dulu."
+            await callback.message.edit_text(teks, reply_markup=builder.as_markup())
+            return
+
         teks = f"✅ Mantap! Data lu udah disimpen.\n\nHalo <b>{data['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try:
@@ -137,7 +167,12 @@ async def callback_menu_utama(callback: CallbackQuery, state: FSMContext):
         nama = user['nama'] if user else "Bro"
         
         ringkasan = await buat_ringkasan_dashboard(user_id)
-        is_vip = await cek_status_vip(user_id)
+        
+        # ✅ FIX LOGIKA ADMIN
+        is_vip_db = await cek_status_vip(user_id)
+        is_admin = (user_id == str(ADMIN_ID))
+        is_vip = is_vip_db or is_admin
+
         teks = f"Halo <b>{nama}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         
         try: 

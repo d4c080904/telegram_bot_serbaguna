@@ -19,10 +19,11 @@ from handlers import export as export_router
 from handlers import voice as voice_router
 from handlers import barcode as barcode_router
 from handlers import premium as premium_router
+from handlers import admin as admin_router # ✅ IMPORT ADMIN ROUTER
 from handlers import router as main_router 
 from services.ai import init_models
 
-# ✅ IMPORT MIDDLEWARE BARU
+# ✅ IMPORT MIDDLEWARE
 from middlewares.premium_gate import PremiumGateMiddleware
 
 # --- SETUP LOGGING ---
@@ -32,7 +33,6 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[logging.FileHandler('bot.log', encoding='utf-8'), logging.StreamHandler()]
 )
-# INI YANG KURANG TADI BRO
 logger = logging.getLogger(__name__) 
 
 async def set_bot_commands(bot: Bot):
@@ -70,6 +70,7 @@ async def main():
     dp.include_router(voice_router.router)
     dp.include_router(barcode_router.router)
     dp.include_router(premium_router.router)
+    dp.include_router(admin_router.router) # ✅ DAFTARIN ADMIN ROUTER
     dp.include_router(main_router.router) 
     
     logger.info("✅ Semua Router berhasil didaftarkan.")
@@ -77,7 +78,7 @@ async def main():
     # --- JALANIN FASTAPI DI BACKGROUND ---
     config = uvicorn.Config(fastapi_app, host="0.0.0.0", port=8000, log_level="warning")
     server = uvicorn.Server(config)
-    asyncio.create_task(server.serve()) # Jalanin web server barengan bot
+    asyncio.create_task(server.serve()) 
     # -------------------------------------
     
     logger.info("✅ Bot & Web Server berhasil jalan! (Mode Async)")

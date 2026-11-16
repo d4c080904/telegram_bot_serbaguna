@@ -2,6 +2,7 @@ import logging
 import hashlib
 import hmac
 import json
+import os
 from urllib.parse import parse_qsl
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
@@ -10,22 +11,22 @@ from database.queries import (
     tambah_food_log, tambah_air, update_user_weight, 
     get_history_makanan_hari_ini, hapus_food_log_by_id, get_unified_history,
     hapus_water_log_by_id, hapus_weight_log_by_id, tambah_workout_log, get_statistik_user,
-    get_user_profile, get_gym_profile, update_profile_web,
+    get_user_profile, get_gym_profile, update_profile_web, save_gym_profile,
     ambil_chat_history, simpan_chat_message, hapus_chat_history
 )
-from services.ai import analisis_foto_makanan, analisis_teks_makanan, estimasi_kalori_olahraga, analisis_alat_gym
-
-# ✅ FIX: Import fungsi yang BENAR dari services/pt_chat.py
-# Signature: proses_chat_pt_core(user_id: str, teks: str) -> dict
-# Return: {"status": "success", "data": "..."} atau {"status": "ai_failed"} atau {"status": "error", "message": "..."}
-# CATATAN: Fungsi ini SUDAH nyimpen chat ke DB (chat_messages) secara internal!
+from services.ai import analisis_foto_makanan, analisis_teks_makanan, estimasi_kalori_olahraga, analisis_alat_gym, rekomendasi_makanan
 from services.pt_chat import proses_chat_pt_core
+
+# ✅ IMPORT FITUR TAMBAHAN (Pastikan path-nya sesuai project lu)
+from services.barcode_scanner import decode_barcode, get_product_from_openfoodfacts
+# GANTI IMPORT INI SESUAI STRUKTUR FOLDER LU (Misal di handlers/export.py atau services/pdf.py)
+# Asumsi gw lu punya fungsi yang bikin PDF dan return file path-nya.
+from services.pdf_generator import buat_laporan_pdf 
 
 from bot_instance import bot
 
 logger = logging.getLogger(__name__)
 app = FastAPI()
-
 
 def verify_telegram_data(init_data: str) -> dict:
     try:
@@ -42,7 +43,6 @@ def verify_telegram_data(init_data: str) -> dict:
         logger.error(f"Verify error: {e}")
         return None
 
-
 async def get_vip_user(request: Request):
     init_data = request.headers.get("X-Telegram-Init-Data")
     if not init_data: raise HTTPException(status_code=401, detail="Bukan dari Telegram")
@@ -52,7 +52,6 @@ async def get_vip_user(request: Request):
     is_vip = await cek_status_vip(user_id)
     if not is_vip: raise HTTPException(status_code=403, detail="Akses ditolak: Anda bukan VIP")
     return user_id
-
 
 @app.post("/webhook/qris")
 async def webhook_qris(request: Request):
@@ -65,7 +64,6 @@ async def webhook_qris(request: Request):
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500)
-
 
 @app.get("/api/chart_data")
 async def get_chart_data(request: Request):
@@ -81,7 +79,6 @@ async def get_chart_data(request: Request):
     except Exception as e:
         logger.error(f"API Chart Error: {e}")
         return {"error": str(e)}
-
 
 @app.post("/api/log_food")
 async def log_food(request: Request, food_text: str = Form(None), food_image: UploadFile = File(None)):
@@ -102,6 +99,61 @@ async def log_food(request: Request, food_text: str = Form(None), food_image: Up
         logger.error(f"Log food error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ✅ ENDPOINT BARU: LOG BARCODE
+@app.post("/api/log_barcode")
+async def api_log_barcode(request: Request, barcode_image: UploadFile = File(...)):
+    user_id = await get_vip_user(request)
+    try:
+        image_bytes = await barcode_image.read()
+        barcode_num = decode_barcode(image_bytes)
+        if not barcode_num: raise HTTPException(status_code=400, detail="Barcode gagal dibaca.")
+        
+        produk = await get_product_from_openfoodfacts(barcode_num)
+        if not produk: raise HTTPException(status_code=404, detail="Produk tidak ditemukan di database.")
+        
+        berhasil = await tambah_food_log(
+            user_id, 0, 0, barcode_num,
+            f"{produk['nama']} ({produk['kategori']})", "1 porsi (100g)",
+            produk['kalori'], produk['protein'], produk['karbo'], produk['lemak'], produk['gula']
+        )
+        if not berhasil: raise HTTPException(status_code=500, detail="Gagal menyimpan data.")
+        return {"status": "success", "data": produk}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ✅ ENDPOINT BARU: MEAL PLANNER
+@app.get("/api/meal_planner")
+async def api_meal_planner(request: Request):
+    user_id = await get_vip_user(request)
+    try:
+        user = await get_user_profile(user_id)
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT total_kalori_masuk, total_kalori_terbakar FROM daily_logs WHERE user_id = $1 AND tanggal = CURRENT_DATE", user_id)
+            
+        target = 2500 # Default
+        masuk = row['total_kalori_masuk'] if row else 0
+        keluar = row['total_kalori_terbakar'] if row else 0
+        sisa = target - (masuk - keluar)
+        
+        resep = await rekomendasi_makanan(sisa, 50, 100, 30, user.get('target', 'recomp'))
+        if not resep: raise HTTPException(status_code=500, detail="AI gagal membuat resep.")
+        return {"status": "success", "data": resep}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ✅ ENDPOINT BARU: EXPORT PDF
+@app.post("/api/export_pdf")
+async def api_export_pdf(request: Request):
+    user_id = await get_vip_user(request)
+    try:
+        file_path = await buat_laporan_pdf(user_id) 
+        with open(file_path, "rb") as f:
+            await bot.send_document(chat_id=user_id, document=f, caption="📄 Berikut laporan GymMate lu bro!")
+        os.remove(file_path)
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Export PDF error: {e}")
+        raise HTTPException(status_code=500, detail="Gagal membuat/mengirim PDF")
 
 @app.post("/api/log_water")
 async def log_water(request: Request):
@@ -109,11 +161,8 @@ async def log_water(request: Request):
     data = await request.json()
     ml = data.get("ml")
     if not ml: raise HTTPException(status_code=400, detail="Jumlah ml kosong")
-    
-    berhasil = await tambah_air(user_id, int(ml))
-    if berhasil: return {"status": "success"}
-    raise HTTPException(status_code=500, detail="Gagal simpan air")
-
+    if await tambah_air(user_id, int(ml)): return {"status": "success"}
+    raise HTTPException(status_code=500)
 
 @app.post("/api/log_weight")
 async def log_weight(request: Request):
@@ -121,164 +170,91 @@ async def log_weight(request: Request):
     data = await request.json()
     berat = data.get("berat")
     if not berat: raise HTTPException(status_code=400, detail="Berat kosong")
-    
-    berhasil = await update_user_weight(user_id, float(berat))
-    if berhasil: return {"status": "success"}
-    raise HTTPException(status_code=500, detail="Gagal simpan berat")
-
+    if await update_user_weight(user_id, float(berat)): return {"status": "success"}
+    raise HTTPException(status_code=500)
 
 @app.post("/api/log_workout")
 async def log_workout(request: Request):
     user_id = await get_vip_user(request)
     data = await request.json()
-    teks_olahraga = data.get("teks")
-    if not teks_olahraga: raise HTTPException(status_code=400, detail="Teks olahraga kosong")
-    
+    teks = data.get("teks")
+    if not teks: raise HTTPException(status_code=400)
     try:
         profil = await get_user_profile(user_id)
-        berat = profil['berat'] if profil and profil.get('berat') else 70
-        
-        hasil_ai = await estimasi_kalori_olahraga(teks_olahraga, berat)
-        if not hasil_ai: raise HTTPException(status_code=400, detail="AI gagal memahami olahraga lu.")
-        
-        olahraga = hasil_ai.get('olahraga', 'Olahraga')
-        durasi = hasil_ai.get('durasi', 30)
-        kalori = hasil_ai.get('kalori_terbakar', 200)
-        
-        berhasil = await tambah_workout_log(user_id, olahraga, durasi, kalori)
-        if not berhasil: raise HTTPException(status_code=500, detail="Gagal simpan ke database")
-        
-        return {"status": "success", "data": {"olahraga": olahraga, "durasi": durasi, "kalori": kalori}}
+        berat = profil['berat'] if profil else 70
+        hasil = await estimasi_kalori_olahraga(teks, berat)
+        if await tambah_workout_log(user_id, hasil['olahraga'], hasil['durasi'], hasil['kalori_terbakar']):
+            return {"status": "success", "data": hasil}
+        raise HTTPException(status_code=500)
     except Exception as e:
-        logger.error(f"Log workout error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/api/get_stats")
 async def get_stats(request: Request):
     user_id = await get_vip_user(request)
-    stats = await get_statistik_user(user_id)
-    return {"stats": stats}
-
+    return {"stats": await get_statistik_user(user_id)}
 
 @app.get("/api/profile")
 async def api_get_profile(request: Request):
     user_id = await get_vip_user(request)
     profil = await get_gym_profile(user_id)
-    if not profil:
-        raise HTTPException(status_code=404, detail="Profil tidak ditemukan")
+    if not profil: raise HTTPException(status_code=404)
     bmi = profil['berat'] / ((profil['tinggi']/100) ** 2) if profil['berat'] and profil['tinggi'] else 0
-    return {
-        "nama": profil['nama'],
-        "umur": profil['umur'],
-        "berat": profil['berat'],
-        "tinggi": profil['tinggi'],
-        "target": profil['target'] or 'recomp',
-        "bmi": round(bmi, 1)
-    }
-
+    return {"nama": profil['nama'], "umur": profil['umur'], "berat": profil['berat'], "tinggi": profil['tinggi'], "target": profil['target'] or 'recomp', "bmi": round(bmi, 1)}
 
 @app.post("/api/profile")
 async def api_update_profile(request: Request):
     user_id = await get_vip_user(request)
     data = await request.json()
-    berat = data.get("berat")
-    tinggi = data.get("tinggi")
-    target = data.get("target")
-    
-    if not all([berat, tinggi, target]):
-        raise HTTPException(status_code=400, detail="Data tidak lengkap")
-        
-    berhasil = await update_profile_web(user_id, float(berat), float(tinggi), target)
-    if berhasil: return {"status": "success"}
-    raise HTTPException(status_code=500, detail="Gagal update profil")
+    if await update_profile_web(user_id, float(data['berat']), float(data['tinggi']), data['target']):
+        return {"status": "success"}
+    raise HTTPException(status_code=500)
 
+@app.post("/api/gym_profile")
+async def api_gym_profile(request: Request):
+    user_id = await get_vip_user(request)
+    data = await request.json()
+    if await save_gym_profile(user_id, data): return {"status": "success"}
+    raise HTTPException(status_code=500)
 
 @app.post("/api/scan_equipment")
 async def api_scan_equipment(request: Request, equipment_image: UploadFile = File(...)):
     user_id = await get_vip_user(request)
-    try:
-        image_bytes = await equipment_image.read()
-        hasil = await analisis_alat_gym(image_bytes)
-        if not hasil: raise HTTPException(status_code=400, detail="AI gagal mengenali alat.")
-        return {"status": "success", "data": hasil}
-    except Exception as e:
-        logger.error(f"Scan equipment error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    image_bytes = await equipment_image.read()
+    hasil = await analisis_alat_gym(image_bytes)
+    return {"status": "success", "data": hasil}
 
-
-# --- CHAT PT AI (FIXED) ---
 @app.get("/api/chat/history")
 async def api_chat_history(request: Request):
     user_id = await get_vip_user(request)
-    try:
-        history = await ambil_chat_history(user_id)
-        return {"history": history}
-    except Exception as e:
-        logger.error(f"Chat history error: {e}")
-        return {"history": []}
-
+    return {"history": await ambil_chat_history(user_id)}
 
 @app.post("/api/chat/send")
 async def api_chat_send(request: Request):
     user_id = await get_vip_user(request)
     data = await request.json()
-    pesan = data.get("pesan", "").strip()
-    if not pesan:
-        raise HTTPException(status_code=400, detail="Pesan kosong")
-    
-    try:
-        # ✅ proses_chat_pt_core SUDAH handle simpan user msg + assistant msg ke DB
-        # Jadi kita TIDAK simpan lagi di sini (biar gak duplikat)
-        # Signature: proses_chat_pt_core(user_id, teks) -> dict
-        result = await proses_chat_pt_core(user_id, pesan)
-        
-        # Handle return type dict
-        if result.get("status") == "success":
-            return {"status": "success", "response": result.get("data", "")}
-        elif result.get("status") == "ai_failed":
-            raise HTTPException(status_code=500, detail="AI gagal merespon. Coba lagi.")
-        else:
-            raise HTTPException(status_code=500, detail=result.get("message", "Error tidak diketahui"))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Chat send error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    result = await proses_chat_pt_core(user_id, data.get("pesan", ""))
+    if result["status"] == "success": return {"response": result["data"]}
+    raise HTTPException(status_code=500)
 
 @app.delete("/api/chat/clear")
 async def api_chat_clear(request: Request):
     user_id = await get_vip_user(request)
-    berhasil = await hapus_chat_history(user_id)
-    if berhasil:
-        return {"status": "success"}
-    raise HTTPException(status_code=500, detail="Gagal hapus chat")
-
+    await hapus_chat_history(user_id)
+    return {"status": "success"}
 
 @app.get("/api/unified_history")
 async def api_unified_history(request: Request):
     user_id = await get_vip_user(request)
-    history = await get_unified_history(user_id)
-    return {"history": history}
-
+    return {"history": await get_unified_history(user_id)}
 
 @app.delete("/api/delete_log/{log_type}/{log_id}")
 async def delete_log(request: Request, log_type: str, log_id: int):
     user_id = await get_vip_user(request)
-    
-    if log_type == 'food':
-        berhasil = await hapus_food_log_by_id(user_id, log_id)
-    elif log_type == 'water':
-        berhasil = await hapus_water_log_by_id(user_id, log_id)
-    elif log_type == 'weight':
-        berhasil = await hapus_weight_log_by_id(user_id, log_id)
-    else:
-        raise HTTPException(status_code=400, detail="Tipe log tidak valid")
-
-    if berhasil: return {"status": "success"}
-    raise HTTPException(status_code=404, detail="Log tidak ditemukan")
-
+    if log_type == 'food': await hapus_food_log_by_id(user_id, log_id)
+    elif log_type == 'water': await hapus_water_log_by_id(user_id, log_id)
+    elif log_type == 'weight': await hapus_weight_log_by_id(user_id, log_id)
+    return {"status": "success"}
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_mini_app():

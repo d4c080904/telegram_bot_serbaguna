@@ -2,6 +2,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery
 from database.queries import cek_status_vip
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from config import ADMIN_ID
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,30 +11,33 @@ class PremiumGateMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
         user_id = str(event.from_user.id)
         
-        # 1. PENGECUALIAN (User tetap bisa akses ini walau belum VIP)
+        # 1. ADMIN BEBAS AKSES
+        if user_id == str(ADMIN_ID):
+            return await handler(event, data)
+            
+        # 2. PENGECUALIAN (User tetap bisa akses ini walau belum VIP)
         if isinstance(event, Message):
-            if event.text and event.text.startswith(('/start', '/premium', '/help')):
+            if event.text and event.text.startswith(('/start', '/help')):
                 return await handler(event, data)
         elif isinstance(event, CallbackQuery):
-            if event.data in ['menu_premium', 'bayar_qris', 'cek_status', 'menu_utama']:
+            if event.data in ['req_access', 'menu_help']:
                 return await handler(event, data)
         
-        # 2. CEK STATUS VIP
+        # 3. CEK STATUS VIP
         is_vip = await cek_status_vip(user_id)
         if not is_vip:
-            # Blokir akses
             if isinstance(event, Message):
                 builder = InlineKeyboardBuilder()
-                builder.button(text="👑 Beli Akses Premium", callback_data="menu_premium")
+                builder.button(text="🔓 Minta Izin Akses", callback_data="req_access")
                 await event.answer(
                     "🔒 <b>AKSES TERBATAS</b>\n\n"
-                    "Bot ini eksklusif untuk member Premium.\n"
-                    "Silakan berlangganan untuk menggunakan seluruh fitur GymMate.", 
+                    "Bot ini masih dalam tahap uji coba terbatas.\n"
+                    "Silakan minta izin akses ke Admin untuk bisa menggunakan bot ini.", 
                     reply_markup=builder.as_markup()
                 )
             elif isinstance(event, CallbackQuery):
-                await event.answer("Akses ditolak. Silakan berlangganan VIP dulu.", show_alert=True)
-            return # Hentikan proses (jangan teruskan ke handler asli)
-        
-        # 3. JIKA VIP, SILAKAN LEWAT
+                await event.answer("Akses ditolak. Silakan minta izin ke Admin.", show_alert=True)
+            return
+            
+        # 4. JIKA VIP, SILAKAN LEWAT
         return await handler(event, data)

@@ -11,11 +11,10 @@ def buat_menu_utama(user_id: str, webapp_url: str, is_vip: bool = False):
     builder.button(text="🍳 Meal Planner", callback_data="menu_meal_planner")
     builder.button(text="📄 Laporan PDF", callback_data="menu_export")
     
+    # ✅ FIX: Cuma nampilin Web Dashboard kalau VIP/Admin.
+    # Tombol Premium dihapus dari sini.
     if is_vip:
-        # ✅ URL dibersihin biar Telegram gak bingung pas buka Mini App
         builder.button(text="📈 Web Dashboard (VIP)", web_app=WebAppInfo(url=webapp_url))
-    else:
-        builder.button(text="👑 Upgrade ke VIP", callback_data="menu_premium")
         
     builder.button(text="📊 Statistik", callback_data="menu_stats")
     builder.button(text="❓ Bantuan", callback_data="menu_help")
@@ -34,7 +33,6 @@ def buat_tombol_gender():
     builder.adjust(2)
     return builder.as_markup()
 
-# ✅ INI FUNGSI YANG HILANG TADI BRO
 def teks_menu_utama(ringkasan):
     return (
         "━━━━━━━━━━━━━━━━━━━━\n"
