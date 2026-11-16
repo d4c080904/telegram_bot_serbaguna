@@ -21,7 +21,7 @@ async def callback_scan_alat(callback: CallbackQuery):
             "Gw bakal kasih tau nama alat, otot yang dilatih, dan cara pakenya yang bener."
         )
         builder = InlineKeyboardBuilder()
-        builder.button(text="❌ Batal", callback_data="menu_utama") # <--- BALIK KE BERANDA
+        builder.button(text="❌ Batal", callback_data="menu_utama")
         try:
             await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=builder.as_markup())
         except Exception:
@@ -29,6 +29,8 @@ async def callback_scan_alat(callback: CallbackQuery):
     except Exception as e: 
         logger.error(f"scan_alat error: {e}")
 
+# ✅ TAMBAHAN: DECORATOR F.PHOTO BIAR BISA NANGKEP FOTO
+@router.message(F.photo) 
 async def proses_foto_alat(message: Message):
     user_id = str(message.from_user.id)
     await delete_wizard_state(user_id, "waiting_equipment_photo")
@@ -54,7 +56,7 @@ async def proses_foto_alat(message: Message):
             
         hasil = result["data"]
         builder = InlineKeyboardBuilder()
-        builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama") # <--- BALIK KE BERANDA
+        builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama")
         
         try:
             await pesan_tunggu.edit_text(hasil, reply_markup=builder.as_markup())

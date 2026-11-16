@@ -9,13 +9,14 @@ logger = logging.getLogger(__name__)
 
 class PremiumGateMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
-        user_id = str(event.from_user.id)
-        
+        user_id = str(event.from_user.id).strip()
+        admin_id = str(ADMIN_ID).strip()
+
         # 1. ADMIN BEBAS AKSES
-        if user_id == str(ADMIN_ID):
+        if user_id == admin_id:
             return await handler(event, data)
             
-        # 2. PENGECUALIAN (User tetap bisa akses ini walau belum VIP)
+        # 2. PENGECUALIAN (Bisa minta akses / bantuan)
         if isinstance(event, Message):
             if event.text and event.text.startswith(('/start', '/help')):
                 return await handler(event, data)
@@ -31,8 +32,7 @@ class PremiumGateMiddleware(BaseMiddleware):
                 builder.button(text="🔓 Minta Izin Akses", callback_data="req_access")
                 await event.answer(
                     "🔒 <b>AKSES TERBATAS</b>\n\n"
-                    "Bot ini masih dalam tahap uji coba terbatas.\n"
-                    "Silakan minta izin akses ke Admin untuk bisa menggunakan bot ini.", 
+                    "Bot ini eksklusif. Silakan minta izin akses ke Admin untuk bisa menggunakan bot ini.", 
                     reply_markup=builder.as_markup()
                 )
             elif isinstance(event, CallbackQuery):

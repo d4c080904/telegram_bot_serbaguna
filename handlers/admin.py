@@ -15,7 +15,6 @@ async def handle_req_access(callback: CallbackQuery):
 
     await request_access_db(user_id, username)
 
-    # Kirim pesan ke Admin
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="✅ Setujui (3 Hari)", callback_data=f"approve_{user_id}"),
@@ -33,11 +32,12 @@ async def handle_req_access(callback: CallbackQuery):
         await callback.message.edit_text("⏳ Permintaan Anda sudah dikirim ke Admin. Mohon tunggu persetujuan.")
     except Exception as e:
         logger.error(f"Gagal kirim pesan ke admin: {e}")
-        await callback.message.edit_text("❌ Gagal mengirim pesan ke Admin. Pastikan ADMIN_ID di .env sudah benar.")
+        await callback.message.edit_text("❌ Gagal mengirim pesan ke Admin.")
 
 @router.callback_query(F.data.startswith("approve_"))
 async def handle_approve(callback: CallbackQuery):
-    if str(callback.from_user.id) != str(ADMIN_ID):
+    # ✅ KUNCI KETAT: Bandingin ID pakai string
+    if str(callback.from_user.id).strip() != str(ADMIN_ID).strip():
         return await callback.answer("Anda bukan Admin!", show_alert=True)
 
     user_id = callback.data.split("_")[1]
@@ -52,7 +52,8 @@ async def handle_approve(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("reject_"))
 async def handle_reject(callback: CallbackQuery):
-    if str(callback.from_user.id) != str(ADMIN_ID):
+    # ✅ KUNCI KETAT: Bandingin ID pakai string
+    if str(callback.from_user.id).strip() != str(ADMIN_ID).strip():
         return await callback.answer("Anda bukan Admin!", show_alert=True)
 
     user_id = callback.data.split("_")[1]

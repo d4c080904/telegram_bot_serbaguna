@@ -10,7 +10,7 @@ from keyboards.menus import (
     tombol_kembali, buat_tombol_gender
 )
 from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard, clear_gym_wizard
-from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode, cek_status_vip
+from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode, cek_status_vip, get_statistik_user
 from database.db import get_db
 from config import ADMIN_ID
 
@@ -38,7 +38,8 @@ async def buat_ringkasan_dashboard(user_id):
         f"⚖️ Berat: {berat_str}\n"
     )
 
-@router.message(Command("start", "help", "menu"))
+# ✅ FIX: Hapus "help" dari sini biar gak bentrok
+@router.message(Command("start", "menu"))
 async def kirim_sambutan(message: Message, state: FSMContext):
     try:
         await state.clear()
@@ -53,7 +54,6 @@ async def kirim_sambutan(message: Message, state: FSMContext):
             await message.answer("Halo bro! 👋 Sebelum mulai, kenalin diri lu dulu ya.\n\nSiapa <b>nama panggilan</b> lu?", parse_mode="HTML")
             return
             
-        # ✅ FIX LOGIKA ADMIN: Admin otomatis dianggap VIP
         is_vip_db = await cek_status_vip(user_id)
         is_admin = (user_id == str(ADMIN_ID))
         is_vip = is_vip_db or is_admin 
@@ -74,6 +74,29 @@ async def kirim_sambutan(message: Message, state: FSMContext):
         await message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
     except Exception as e:
         logger.error(f"[start] error: {e}")
+
+# ✅ FIX: Bikin handler khusus buat /help
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    try:
+        teks = (
+            "❓ <b>BANTUAN & PANDUAN GYMBOT</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "<b>🍎 Kalori & Gula</b>\n→ Foto makanan buat hitung kalori otomatis.\n→ Bisa reply pesan hasil foto buat koreksi porsi.\n\n"
+            "<b>💧 Progress & Air</b>\n→ Catat minum air & berat badan harian.\n\n"
+            "<b>💪 Program Gym</b>\n→ Bikin program latihan (Noob/Pro).\n→ Catat log latihan harian.\n\n"
+            "<b>💬 Chat PT AI</b>\n→ Tanya jawab seputar gym & nutrisi layaknya punya PT pribadi.\n\n"
+            "<b>🔍 Scan Alat</b>\n→ Foto alat gym buat tau cara pakenya.\n\n"
+            "<b>🍳 Meal Planner</b>\n→ Rekomendasi resep sesuai sisa kalori lu.\n\n"
+            "<b>⚙️ Command Lain:</b>\n"
+            "<code>/start</code> — Buka menu utama\n"
+            "<code>/gym</code> — Langsung ke menu program gym\n"
+            "<code>/stats</code> — Lihat statistik lu\n"
+            "<code>/cancel</code> — Batalin input yang lagi jalan"
+        )
+        await message.answer(teks, parse_mode="HTML", reply_markup=tombol_kembali())
+    except Exception as e:
+        logger.error(f"[cmd_help] error: {e}")
 
 async def proses_onboarding(message: Message, wizard: dict):
     user_id = str(message.from_user.id)
@@ -132,7 +155,6 @@ async def callback_gender(callback: CallbackQuery):
         
         ringkasan = await buat_ringkasan_dashboard(user_id)
         
-        # ✅ FIX LOGIKA ADMIN: Admin otomatis dianggap VIP
         is_vip_db = await cek_status_vip(user_id)
         is_admin = (user_id == str(ADMIN_ID))
         is_vip = is_vip_db or is_admin
@@ -168,7 +190,6 @@ async def callback_menu_utama(callback: CallbackQuery, state: FSMContext):
         
         ringkasan = await buat_ringkasan_dashboard(user_id)
         
-        # ✅ FIX LOGIKA ADMIN
         is_vip_db = await cek_status_vip(user_id)
         is_admin = (user_id == str(ADMIN_ID))
         is_vip = is_vip_db or is_admin
@@ -182,22 +203,48 @@ async def callback_menu_utama(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"[menu_utama] error: {e}")
 
+@router.message(Command("stats"))
+async def cmd_stats(message: Message):
+    try:
+        user_id = str(message.from_user.id)
+        stats = await get_statistik_user(user_id)
+        
+        teks = (
+            "📊 <b>STATISTIK GYM LU</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🍎 Log Makanan: <b>{stats['makanan']} kali</b>\n"
+            f"💧 Log Air Minum: <b>{stats['air']} kali</b>\n"
+            f"💪 Log Latihan: <b>{stats['gym']} kali</b>\n\n"
+            "<i>Terus pakai bot ini biar badan makin gede!</i> 🚀"
+        )
+        await message.answer(teks, parse_mode="HTML", reply_markup=tombol_kembali())
+    except Exception as e:
+        logger.error(f"[cmd_stats] error: {e}")
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    try:
+        await state.clear()
+        await message.answer(
+            "✅ Aksi berhasil dibatalkan.\nKetik /start atau klik tombol di bawah untuk kembali ke menu utama.",
+            reply_markup=tombol_kembali()
+        )
+    except Exception as e:
+        logger.error(f"[cmd_cancel] error: {e}")
+
 @router.callback_query(F.data == "menu_stats")
 async def callback_menu_stats(callback: CallbackQuery):
     try:
         user_id = str(callback.from_user.id)
-        async with await get_db() as conn:
-            jumlah_makan = await conn.fetchval("SELECT COUNT(*) FROM food_logs WHERE user_id = $1", user_id)
-            jumlah_air = await conn.fetchval("SELECT COUNT(*) FROM water_logs WHERE user_id = $1", user_id)
-            jumlah_gym = await conn.fetchval("SELECT COUNT(*) FROM gym_logs WHERE user_id = $1", user_id)
+        stats = await get_statistik_user(user_id)
 
         await callback.answer()
         teks = (
             "📊 <b>STATISTIK GYM LU</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🍎 Log Makanan: <b>{jumlah_makan} kali</b>\n"
-            f"💧 Log Air Minum: <b>{jumlah_air} kali</b>\n"
-            f"💪 Log Latihan: <b>{jumlah_gym} kali</b>\n\n"
+            f"🍎 Log Makanan: <b>{stats['makanan']} kali</b>\n"
+            f"💧 Log Air Minum: <b>{stats['air']} kali</b>\n"
+            f"💪 Log Latihan: <b>{stats['gym']} kali</b>\n\n"
             "<i>Terus pakai bot ini biar badan makin gede!</i> 🚀"
         )
         try: await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=tombol_kembali())
@@ -220,6 +267,7 @@ async def callback_menu_help(callback: CallbackQuery):
             "<b>⚙️ Command Lain:</b>\n"
             "<code>/start</code> — Buka menu utama\n"
             "<code>/gym</code> — Langsung ke menu program gym\n"
+            "<code>/stats</code> — Lihat statistik lu\n"
             "<code>/cancel</code> — Batalin input yang lagi jalan"
         )
         try: await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=tombol_kembali())
