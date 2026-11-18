@@ -10,7 +10,8 @@ from database.queries import (
     catat_payment_event, aktifkan_premium, get_db, cek_status_vip, 
     tambah_food_log, tambah_air, update_user_weight, 
     get_history_makanan_hari_ini, hapus_food_log_by_id, get_unified_history,
-    hapus_water_log_by_id, hapus_weight_log_by_id, tambah_workout_log, get_statistik_user,
+    hapus_water_log_by_id, hapus_weight_log_by_id, hapus_workout_log_by_id,
+    tambah_workout_log, get_statistik_user,
     get_user_profile, get_gym_profile, update_profile_web, save_gym_profile,
     ambil_chat_history, simpan_chat_message, hapus_chat_history
 )
@@ -18,7 +19,7 @@ from services.ai import analisis_foto_makanan, analisis_teks_makanan, estimasi_k
 from services.pt_chat import proses_chat_pt_core
 from services.barcode_scanner import decode_barcode, get_product_from_openfoodfacts
 from services.pdf_generator import buat_laporan_pdf 
-from config import WEBHOOK_SECRET # ✅ Import Secret
+from config import WEBHOOK_SECRET
 from bot_instance import bot
 
 logger = logging.getLogger(__name__)
@@ -49,11 +50,9 @@ async def get_vip_user(request: Request):
     if not is_vip: raise HTTPException(status_code=403, detail="Akses ditolak: Anda bukan VIP")
     return user_id
 
-# ✅ WEBHOOK DENGAN SATPAM SECRET HEADER
 @app.post("/webhook/qris")
 async def webhook_qris(request: Request):
     try:
-        # 1. Cek Header Rahasia
         secret_header = request.headers.get("x-webhook-secret")
         if secret_header != WEBHOOK_SECRET:
             logger.warning(f"⚠️ Ada yang coba nembak webhook ilegal dari IP: {request.client.host}")
@@ -65,7 +64,6 @@ async def webhook_qris(request: Request):
         amount = data.get("amount")
         status = data.get("status")
         
-        # 2. Validasi Nominal (Opsional, biar makin aman)
         if status == "SUCCESS" and int(amount) >= 10000:
             if await catat_payment_event(trx_id, user_id, amount, status):
                 await aktifkan_premium(user_id, days=30)
@@ -76,7 +74,6 @@ async def webhook_qris(request: Request):
         logger.error(f"Webhook error: {e}")
         raise HTTPException(status_code=500)
 
-# (SISA ENDPOINT DI BAWAH INI SAMA PERSIS KAYAK SEBELUMNYA)
 @app.get("/api/chart_data")
 async def get_chart_data(request: Request):
     user_id = await get_vip_user(request)
@@ -226,12 +223,22 @@ async def api_unified_history(request: Request):
     user_id = await get_vip_user(request)
     return {"history": await get_unified_history(user_id)}
 
+# FIX BUG BARU: delete_log handle workout + return 404 kalau gak ketemu
 @app.delete("/api/delete_log/{log_type}/{log_id}")
 async def delete_log(request: Request, log_type: str, log_id: int):
     user_id = await get_vip_user(request)
-    if log_type == 'food': await hapus_food_log_by_id(user_id, log_id)
-    elif log_type == 'water': await hapus_water_log_by_id(user_id, log_id)
-    elif log_type == 'weight': await hapus_weight_log_by_id(user_id, log_id)
+    if log_type == 'food':
+        berhasil = await hapus_food_log_by_id(user_id, log_id)
+    elif log_type == 'water':
+        berhasil = await hapus_water_log_by_id(user_id, log_id)
+    elif log_type == 'weight':
+        berhasil = await hapus_weight_log_by_id(user_id, log_id)
+    elif log_type == 'workout':
+        berhasil = await hapus_workout_log_by_id(user_id, log_id)
+    else:
+        raise HTTPException(status_code=400, detail="Tipe log tidak valid")
+    if not berhasil:
+        raise HTTPException(status_code=404, detail="Log tidak ditemukan")
     return {"status": "success"}
 
 @app.get("/", response_class=HTMLResponse)

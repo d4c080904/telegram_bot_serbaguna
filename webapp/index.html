@@ -35,7 +35,6 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .content { padding: 20px; }
 
-        /* HEADER ATAS */
         .top-header { position: fixed; top: 0; left: 0; right: 0; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(20px); border-bottom: 1px solid var(--card-border); padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 99; }
         .profile-info { display: flex; flex-direction: column; cursor: pointer; }
         .profile-name { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
@@ -62,7 +61,6 @@
         .btn-primary:active { transform: scale(0.97); }
         .btn-secondary { width: 100%; padding: 14px; border: none; border-radius: 12px; background: rgba(255,255,255,0.1); color: white; font-weight: 700; cursor: pointer; margin-top: 10px; }
 
-        /* SUB-TABS */
         .sub-tabs { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; scrollbar-width: none; }
         .sub-tabs::-webkit-scrollbar { display: none; }
         .sub-tab-btn { flex: 0 0 auto; padding: 10px 15px; border-radius: 20px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -76,14 +74,12 @@
         .btn-delete { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); border: none; padding: 8px; border-radius: 8px; cursor: pointer; }
         .result-box { background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 12px; margin-top: 15px; font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
 
-        /* NAVBAR 5 TAB */
         .navbar { position: fixed; bottom: 15px; left: 15px; right: 15px; background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(20px); display: flex; justify-content: space-around; padding: 10px; border-radius: 20px; border: 1px solid var(--card-border); z-index: 100; }
         .nav-btn { background: none; border: none; color: var(--text-muted); font-size: 9px; font-weight: 600; display: flex; flex-direction: column; align-items: center; flex: 1; cursor: pointer; }
         .nav-btn span { font-size: 20px; margin-bottom: 3px; transition: 0.2s; }
         .nav-btn.active { color: var(--accent-blue); }
         .nav-btn.active span { transform: translateY(-2px); }
 
-        /* CHAT */
         #page-chat { padding-bottom: 40px; }
         .chat-container { display: flex; flex-direction: column; gap: 10px; }
         .chat-bubble { max-width: 85%; padding: 12px 16px; border-radius: 16px; font-size: 14px; line-height: 1.5; word-wrap: break-word; }
@@ -101,7 +97,6 @@
     <div id="loading-screen"><div class="spinner"></div><div style="font-weight: 600; letter-spacing: 1px;">GYMMATE AI</div></div>
 
     <div id="app-container">
-        <!-- HEADER ATAS (PROFIL, PDF, BANTUAN) -->
         <div class="top-header" id="globalHeader">
             <div class="profile-info" onclick="switchTab('profile', document.getElementById('nav-dash'))">
                 <div class="profile-name">👋 <span id="headerName">Loading</span> <span class="bmi-badge-sm" id="headerBmi">BMI</span></div>
@@ -113,7 +108,6 @@
             </div>
         </div>
 
-        <!-- 1. DASHBOARD -->
         <div id="page-dashboard" class="page active content">
             <div class="header-title"><h2>Dashboard</h2><p>Pantau progres harian lu.</p></div>
             
@@ -136,7 +130,6 @@
             <div class="card"><h3>⚖️ Tren Berat Badan</h3><div class="chart-container"><canvas id="weightChart"></canvas></div></div>
         </div>
 
-        <!-- 2. NUTRISI -->
         <div id="page-nutrisi" class="page content">
             <div class="header-title"><h2>Nutrisi & Hidrasi</h2></div>
             <div class="sub-tabs">
@@ -145,7 +138,6 @@
                 <button class="sub-tab-btn" onclick="switchSubTab('nutrisi', 'meal', this)">🍳 Meal Planner</button>
             </div>
 
-            <!-- SUB: MAKANAN & BARCODE -->
             <div id="sub-nutrisi-food">
                 <div class="card">
                     <h3>Foto / Teks Makanan</h3>
@@ -165,7 +157,6 @@
                 <div id="nutrisiResult" class="result-box" style="display:none;"></div>
             </div>
 
-            <!-- SUB: AIR & BERAT -->
             <div id="sub-nutrisi-water" style="display: none;">
                 <div class="card">
                     <h3>💧 Minum Air</h3>
@@ -184,7 +175,6 @@
                 </div>
             </div>
 
-            <!-- SUB: MEAL PLANNER -->
             <div id="sub-nutrisi-meal" style="display: none;">
                 <div class="card">
                     <h3>🍳 Rekomendasi Resep AI</h3>
@@ -195,7 +185,6 @@
             </div>
         </div>
 
-        <!-- 3. GYM -->
         <div id="page-gym" class="page content">
             <div class="header-title"><h2>Gym Area</h2></div>
             <div class="sub-tabs">
@@ -268,20 +257,17 @@
             </div>
         </div>
 
-        <!-- 4. HISTORY -->
         <div id="page-history" class="page content">
             <div class="header-title"><h2>Timeline Aktivitas</h2></div>
             <div class="card"><div id="historyList">Memuat data...</div></div>
         </div>
 
-        <!-- 5. PT AI -->
         <div id="page-chat" class="page content">
             <div class="header-title"><h2>PT AI Chat</h2></div>
             <button class="btn-secondary" onclick="clearChat()" style="margin-bottom:15px; background:rgba(239, 68, 68, 0.2); color:var(--accent-red);">🗑️ Hapus Riwayat</button>
             <div id="chatContainer" class="chat-container"></div>
         </div>
 
-        <!-- HALAMAN PROFIL (DARI HEADER) -->
         <div id="page-profile" class="page content" style="padding-top: 20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
                 <button class="header-btn" onclick="switchTab('dashboard', document.getElementById('nav-dash'))">⬅️</button>
@@ -304,7 +290,6 @@
             </div>
         </div>
 
-        <!-- HALAMAN BANTUAN (DARI HEADER) -->
         <div id="page-help" class="page content" style="padding-top: 20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
                 <button class="header-btn" onclick="switchTab('dashboard', document.getElementById('nav-dash'))">⬅️</button>
@@ -320,13 +305,11 @@
             </div>
         </div>
 
-        <!-- CHAT INPUT -->
         <div id="chatInputWrapper" class="chat-input-wrapper" style="display: none;">
             <input type="text" id="chatInput" placeholder="Tanya PT AI..." />
             <button class="chat-send-btn" id="chatSendBtn" onclick="sendChatMessage()">➤</button>
         </div>
 
-        <!-- NAVBAR 5 TAB -->
         <div class="navbar">
             <button id="nav-dash" class="nav-btn active" onclick="switchTab('dashboard', this)"><span>📈</span> Dash</button>
             <button id="nav-nutrisi" class="nav-btn" onclick="switchTab('nutrisi', this)"><span>🍏</span> Nutrisi</button>
@@ -364,7 +347,6 @@
         }
 
         function switchSubTab(parent, sub, btn) {
-            // Remove active class from all sub-tabs in this parent
             document.querySelectorAll(`#page-${parent} .sub-tab-btn`).forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
@@ -392,7 +374,7 @@
                     document.getElementById('dashMasuk').innerText = today.total_kalori_masuk;
                     document.getElementById('dashBakar').innerText = today.total_kalori_keluar;
                     
-                    let target = 2500; // Bisa disesuaikan
+                    let target = 2500;
                     document.getElementById('dashBatas').innerText = target;
                     document.getElementById('dashSisa').innerText = target - (today.total_kalori_masuk - today.total_kalori_keluar);
                 }
@@ -433,7 +415,6 @@
             } catch(e) {}
         }
 
-        // --- SUBMIT FORMS ---
         document.getElementById('foodForm').onsubmit = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('btnFood'); btn.innerText = "⏳ Proses...";
@@ -478,7 +459,7 @@
             const btn = document.getElementById('btnWorkout'); btn.innerText = "⏳ Mikir...";
             const res = await fetch('/api/log_workout', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ teks: document.getElementById('workoutText').value }) });
             const r = document.getElementById('workoutResult'); r.style.display = 'block';
-            if(res.ok) { const d = await res.json(); r.innerHTML = `✅ <b>${d.data.olahraga}</b><br>⏳ ${d.data.durasi} mnt | 🔥 ${d.data.kalori} kcal`; refreshData(); }
+            if(res.ok) { const d = await res.json(); r.innerHTML = `✅ <b>${d.data.olahraga}</b><br>⏳ ${d.data.durasi} mnt | 🔥 ${d.data.kalori_terbakar} kcal`; refreshData(); }
             else r.innerText = "❌ Gagal menganalisis.";
             btn.innerText = "🔥 Simpan Latihan";
         };
@@ -523,22 +504,60 @@
             });
         }
 
-        // --- HISTORY & CHAT ---
+        // ===== FIX BUG #2, #3: Unified History dengan unit, workout, dan jam =====
         async function loadHistory() {
-            const res = await fetch('/api/unified_history', { headers });
-            const data = await res.json();
-            const list = document.getElementById('historyList'); list.innerHTML = "";
-            data.history.forEach(item => {
-                let icon = "📝";
-                if (item.type === 'food') icon = "🍽️"; else if (item.type === 'water') icon = "💧"; else if (item.type === 'weight') icon = "⚖️";
-                list.innerHTML += `<div class="history-item">
-                    <div>${icon} <b>${item.title}</b><br><small>${item.value}</small></div>
-                    <button class="btn-delete" onclick="deleteLog('${item.type}', ${item.id})">🗑️</button>
-                </div>`;
-            });
+            const list = document.getElementById('historyList');
+            list.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:13px;">Memuat timeline...</p>';
+            try {
+                const res = await fetch('/api/unified_history', { headers });
+                const data = await res.json();
+                list.innerHTML = "";
+                if (!data.history || data.history.length === 0) {
+                    list.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:13px;">Belum ada aktivitas hari ini.</p>';
+                    return;
+                }
+                data.history.forEach(item => {
+                    let icon = "📝";
+                    let subtext = "";
+                    if (item.type === 'food') {
+                        icon = "🍽️";
+                        subtext = `${item.value} kcal`;
+                    } else if (item.type === 'water') {
+                        icon = "💧";
+                        subtext = `+${item.value} ml`;
+                    } else if (item.type === 'weight') {
+                        icon = "⚖️";
+                        subtext = `${item.value} kg`;
+                    } else if (item.type === 'workout') {
+                        icon = "🏋️";
+                        subtext = `${item.value} kcal` + (item.durasi ? ` • ${item.durasi} mnt` : "");
+                    }
+                    list.innerHTML += `<div class="history-item">
+                        <div>${icon} <b>${item.title}</b><br><small>${subtext} • ${item.waktu || '--:--'}</small></div>
+                        <button class="btn-delete" onclick="deleteLog('${item.type}', ${item.id})">🗑️</button>
+                    </div>`;
+                });
+            } catch (err) {
+                list.innerHTML = '<p style="text-align:center;color:var(--accent-red);font-size:13px;">Gagal memuat timeline.</p>';
+            }
         }
+
+        // ===== FIX BUG #4: Delete dengan konfirmasi =====
         async function deleteLog(type, id) {
-            await fetch(`/api/delete_log/${type}/${id}`, { method: 'DELETE', headers }); loadHistory(); refreshData(); loadStats();
+            const label = { food: "makanan", water: "air minum", weight: "berat", workout: "latihan" }[type] || type;
+            if (!confirm(`Hapus catatan ${label} ini?\nData bakal ilang dari database, history, dan grafik.`)) return;
+            try {
+                const res = await fetch(`/api/delete_log/${type}/${id}`, { method: 'DELETE', headers });
+                if (res.ok) {
+                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                    loadHistory(); refreshData(); loadStats();
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    alert(`Gagal hapus: ${err.detail || 'unknown error'}`);
+                }
+            } catch (err) {
+                alert("Koneksi error saat hapus.");
+            }
         }
 
         async function loadChatHistory() {
@@ -564,7 +583,6 @@
             await fetch('/api/chat/clear', { method: 'DELETE', headers }); loadChatHistory();
         }
 
-        // INIT
         if (!initData) {
             document.getElementById('loading-screen').style.display = 'none';
             alert("Buka lewat Telegram ya bro!");

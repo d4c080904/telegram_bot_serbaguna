@@ -39,7 +39,15 @@ async def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
                       str(user_id), nama, int(umur), float(tinggi), jenis_kelamin)
 
             tanggal_ini = datetime.date.today()
-            await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
+            # FIX BUG #1: Guard insert — update kalau hari ini sudah ada, insert kalau belum
+            existing = await conn.fetchrow(
+                "SELECT id FROM weight_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id DESC LIMIT 1",
+                str(user_id), tanggal_ini
+            )
+            if existing:
+                await conn.execute("UPDATE weight_logs SET berat = $1 WHERE id = $2", float(berat), existing['id'])
+            else:
+                await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
             return True
     except Exception as e: logger.error(f"save_user_profile error: {e}"); return False
 
@@ -49,7 +57,15 @@ async def update_user_weight(user_id, berat_baru):
             berat_float = float(parse_number(berat_baru))
             await conn.execute("UPDATE user_profiles SET berat = $1 WHERE user_id = $2", berat_float, str(user_id))
             tanggal_ini = datetime.date.today()
-            await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, berat_float)
+            # FIX BUG #1: Guard insert
+            existing = await conn.fetchrow(
+                "SELECT id FROM weight_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id DESC LIMIT 1",
+                str(user_id), tanggal_ini
+            )
+            if existing:
+                await conn.execute("UPDATE weight_logs SET berat = $1 WHERE id = $2", berat_float, existing['id'])
+            else:
+                await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, berat_float)
             return True
     except Exception as e: logger.error(f"update_user_weight error: {e}"); return False
 
@@ -394,27 +410,36 @@ async def cek_status_vip(user_id):
         logger.error(f"cek_status_vip error: {e}")
         return False
 
+# ==========================================
+# --- UNIFIED TIMELINE (MAKANAN, AIR, BERAT, WORKOUT) ---
+# ==========================================
 async def get_unified_history(user_id):
     try:
         async with await get_db() as conn:
             tanggal_ini = datetime.date.today()
             
             food = await conn.fetch('''
-                SELECT id, 'food' as type, nama_makanan as title, kalori as value, waktu 
+                SELECT id, 'food' as type, nama_makanan as title, kalori as value, NULL::INTEGER as durasi, waktu 
                 FROM food_logs WHERE user_id = $1 AND tanggal = $2
             ''', str(user_id), tanggal_ini)
             
             water = await conn.fetch('''
-                SELECT id, 'water' as type, 'Air Minum' as title, ml as value, waktu 
+                SELECT id, 'water' as type, 'Air Minum' as title, ml as value, NULL::INTEGER as durasi, waktu 
                 FROM water_logs WHERE user_id = $1 AND tanggal = $2
             ''', str(user_id), tanggal_ini)
             
             weight = await conn.fetch('''
-                SELECT id, 'weight' as type, 'Timbang Berat' as title, berat as value, waktu 
+                SELECT id, 'weight' as type, 'Timbang Berat' as title, berat as value, NULL::INTEGER as durasi, waktu 
                 FROM weight_logs WHERE user_id = $1 AND tanggal = $2
             ''', str(user_id), tanggal_ini)
+
+            # FIX BUG #2: Tambah workout_logs
+            workout = await conn.fetch('''
+                SELECT id, 'workout' as type, olahraga as title, kalori_terbakar as value, durasi, waktu 
+                FROM workout_logs WHERE user_id = $1 AND tanggal = $2
+            ''', str(user_id), tanggal_ini)
             
-            all_logs = list(food) + list(water) + list(weight)
+            all_logs = list(food) + list(water) + list(weight) + list(workout)
             all_logs.sort(key=lambda x: x['waktu'] or datetime.datetime.min, reverse=True)
             
             result = []
@@ -428,6 +453,9 @@ async def get_unified_history(user_id):
         logger.error(f"get_unified_history error: {e}")
         return []
 
+# ==========================================
+# --- FUNGSI DELETE PER TIPE LOG ---
+# ==========================================
 async def hapus_water_log_by_id(user_id, log_id):
     try:
         async with await get_db() as conn:
@@ -441,6 +469,14 @@ async def hapus_weight_log_by_id(user_id, log_id):
             result = await conn.execute('''DELETE FROM weight_logs WHERE id = $1 AND user_id = $2''', int(log_id), str(user_id))
             return int(result.split(" ")[1]) > 0
     except Exception as e: logger.error(f"hapus_weight_log_by_id error: {e}"); return False
+
+# FIX BUG BARU: Fungsi delete workout
+async def hapus_workout_log_by_id(user_id, log_id):
+    try:
+        async with await get_db() as conn:
+            result = await conn.execute('''DELETE FROM workout_logs WHERE id = $1 AND user_id = $2''', int(log_id), str(user_id))
+            return int(result.split(" ")[1]) > 0
+    except Exception as e: logger.error(f"hapus_workout_log_by_id error: {e}"); return False
 
 async def get_statistik_user(user_id):
     try:
@@ -463,7 +499,15 @@ async def update_profile_web(user_id, berat, tinggi, target):
             await conn.execute('''UPDATE user_profiles SET berat = $1, tinggi = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3''', float(berat), float(tinggi), str(user_id))
             
             tanggal_ini = datetime.date.today()
-            await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
+            # FIX BUG #1: Guard insert
+            existing = await conn.fetchrow(
+                "SELECT id FROM weight_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id DESC LIMIT 1",
+                str(user_id), tanggal_ini
+            )
+            if existing:
+                await conn.execute("UPDATE weight_logs SET berat = $1 WHERE id = $2", float(berat), existing['id'])
+            else:
+                await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
             
             await conn.execute('''UPDATE gym_profile SET target = $1 WHERE user_id = $2''', target, str(user_id))
             
@@ -473,12 +517,11 @@ async def update_profile_web(user_id, berat, tinggi, target):
         return False
 
 # ==========================================
-# --- FUNGSI BARU: SISTEM IZIN AKSES (INVITE ONLY) ---
+# --- FUNGSI SISTEM IZIN AKSES (INVITE ONLY) ---
 # ==========================================
 async def request_access_db(user_id, username):
     try:
         async with await get_db() as conn:
-            # Daftarin user ke tabel users (kalau belum ada)
             await conn.execute('''
                 INSERT INTO users (user_id, nama) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING
             ''', str(user_id), username)
@@ -490,7 +533,6 @@ async def request_access_db(user_id, username):
 async def approve_user_access(user_id, days=3):
     try:
         async with await get_db() as conn:
-            # Beri akses premium (trial) selama X hari
             await conn.execute('''
                 UPDATE users SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval WHERE user_id = $2
             ''', str(days), str(user_id))
