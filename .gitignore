@@ -17,7 +17,13 @@ env/
 bot.log
 
 # ==========================================
-# 3. PYTHON & TESTING CACHE
+# 3. BACKUP FOLDER (PENTING!)
+# ==========================================
+backups/
+*.sql
+
+# ==========================================
+# 4. PYTHON & TESTING CACHE
 # ==========================================
 __pycache__/
 *.py[cod]
@@ -25,19 +31,19 @@ __pycache__/
 .pytest_cache/
 
 # ==========================================
-# 4. MEDIA TEMPORARY
+# 5. MEDIA TEMPORARY
 # ==========================================
 video_*.mp4
 dl_*/
 
 # ==========================================
-# 5. OS / EDITOR (ANTISIPASI)
+# 6. OS / EDITOR (ANTISIPASI)
 # ==========================================
 .DS_Store
 Thumbs.db
 .vscode/
 
 # ==========================================
-# 6. TOOLS & EXECUTABLES
+# 7. TOOLS & EXECUTABLES
 # ==========================================
 ngrok.exe
