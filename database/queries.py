@@ -26,11 +26,12 @@ async def get_user_profile(user_id):
 async def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
     try:
         async with await get_db() as conn:
+            berat_float = round(float(berat), 1)  # FIX: hindari noise float
             await conn.execute('''INSERT INTO user_profiles (user_id, nama, umur, berat, tinggi, jenis_kelamin, updated_at) 
                          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
                          ON CONFLICT (user_id) DO UPDATE SET 
                          nama=EXCLUDED.nama, umur=EXCLUDED.umur, berat=EXCLUDED.berat, tinggi=EXCLUDED.tinggi, jenis_kelamin=EXCLUDED.jenis_kelamin, updated_at=CURRENT_TIMESTAMP''', 
-                      str(user_id), nama, int(umur), float(berat), float(tinggi), jenis_kelamin)
+                      str(user_id), nama, int(umur), berat_float, float(tinggi), jenis_kelamin)
             
             await conn.execute('''INSERT INTO users (user_id, nama, umur, tinggi, gender) 
                          VALUES ($1, $2, $3, $4, $5)
@@ -45,16 +46,16 @@ async def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
                 str(user_id), tanggal_ini
             )
             if existing:
-                await conn.execute("UPDATE weight_logs SET berat = $1 WHERE id = $2", float(berat), existing['id'])
+                await conn.execute("UPDATE weight_logs SET berat = $1 WHERE id = $2", berat_float, existing['id'])
             else:
-                await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
+                await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, berat_float)
             return True
     except Exception as e: logger.error(f"save_user_profile error: {e}"); return False
 
 async def update_user_weight(user_id, berat_baru):
     try:
         async with await get_db() as conn:
-            berat_float = float(parse_number(berat_baru))
+            berat_float = round(float(parse_number(berat_baru)), 1)  # FIX: hindari noise float
             await conn.execute("UPDATE user_profiles SET berat = $1 WHERE user_id = $2", berat_float, str(user_id))
             tanggal_ini = datetime.date.today()
             # FIX BUG #1: Guard insert
@@ -433,7 +434,6 @@ async def get_unified_history(user_id):
                 FROM weight_logs WHERE user_id = $1 AND tanggal = $2
             ''', str(user_id), tanggal_ini)
 
-            # FIX BUG #2: Tambah workout_logs
             workout = await conn.fetch('''
                 SELECT id, 'workout' as type, olahraga as title, kalori_terbakar as value, durasi, waktu 
                 FROM workout_logs WHERE user_id = $1 AND tanggal = $2
@@ -446,6 +446,8 @@ async def get_unified_history(user_id):
             for row in all_logs:
                 r = dict(row)
                 if r['waktu']: r['waktu'] = r['waktu'].strftime("%H:%M")
+                if r['type'] == 'weight' and r['value'] is not None:
+                    r['value'] = round(float(r['value']), 1)
                 result.append(r)
                 
             return result
@@ -470,7 +472,6 @@ async def hapus_weight_log_by_id(user_id, log_id):
             return int(result.split(" ")[1]) > 0
     except Exception as e: logger.error(f"hapus_weight_log_by_id error: {e}"); return False
 
-# FIX BUG BARU: Fungsi delete workout
 async def hapus_workout_log_by_id(user_id, log_id):
     try:
         async with await get_db() as conn:
@@ -493,10 +494,60 @@ async def get_statistik_user(user_id):
         logger.error(f"get_statistik_user error: {e}")
         return {"makanan": 0, "air": 0, "gym": 0}
 
+async def get_user_full_stats(user_id):
+    """Statistik lengkap sepanjang masa untuk /myprogress"""
+    try:
+        async with await get_db() as conn:
+            total_food = await conn.fetchval("SELECT COUNT(*) FROM food_logs WHERE user_id = $1", str(user_id))
+            total_water = await conn.fetchval("SELECT COUNT(*) FROM water_logs WHERE user_id = $1", str(user_id))
+            total_workout = await conn.fetchval("SELECT COUNT(*) FROM workout_logs WHERE user_id = $1", str(user_id))
+            
+            days_active = await conn.fetchval("""
+                SELECT COUNT(DISTINCT tanggal) FROM (
+                    SELECT tanggal FROM food_logs WHERE user_id = $1
+                    UNION SELECT tanggal FROM water_logs WHERE user_id = $1
+                    UNION SELECT tanggal FROM workout_logs WHERE user_id = $1
+                    UNION SELECT tanggal FROM weight_logs WHERE user_id = $1
+                ) t
+            """, str(user_id))
+            
+            total_water_ml = await conn.fetchval("SELECT COALESCE(SUM(ml), 0) FROM water_logs WHERE user_id = $1", str(user_id))
+            total_kalori = await conn.fetchval("SELECT COALESCE(SUM(kalori), 0) FROM food_logs WHERE user_id = $1", str(user_id))
+            total_burned = await conn.fetchval("SELECT COALESCE(SUM(kalori_terbakar), 0) FROM workout_logs WHERE user_id = $1", str(user_id))
+            
+            first_weight = await conn.fetchval("SELECT berat FROM weight_logs WHERE user_id = $1 ORDER BY tanggal ASC, id ASC LIMIT 1", str(user_id))
+            last_weight = await conn.fetchval("SELECT berat FROM weight_logs WHERE user_id = $1 ORDER BY tanggal DESC, id DESC LIMIT 1", str(user_id))
+            
+            first_date = await conn.fetchval("""
+                SELECT MIN(tanggal) FROM (
+                    SELECT tanggal FROM food_logs WHERE user_id = $1
+                    UNION SELECT tanggal FROM water_logs WHERE user_id = $1
+                    UNION SELECT tanggal FROM workout_logs WHERE user_id = $1
+                ) t
+            """, str(user_id))
+            
+            return {
+                "total_food": total_food or 0,
+                "total_water": total_water or 0,
+                "total_workout": total_workout or 0,
+                "days_active": days_active or 0,
+                "total_water_ml": total_water_ml or 0,
+                "total_kalori": total_kalori or 0,
+                "total_burned": total_burned or 0,
+                "first_weight": round(float(first_weight), 1) if first_weight else None,
+                "last_weight": round(float(last_weight), 1) if last_weight else None,
+                "first_date": first_date
+            }
+    except Exception as e:
+        logger.error(f"get_user_full_stats error: {e}")
+        return None
+
 async def update_profile_web(user_id, berat, tinggi, target):
     try:
         async with await get_db() as conn:
-            await conn.execute('''UPDATE user_profiles SET berat = $1, tinggi = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3''', float(berat), float(tinggi), str(user_id))
+            berat_float = round(float(berat), 1)  # FIX: hindari noise float
+            tinggi_float = float(tinggi)
+            await conn.execute('''UPDATE user_profiles SET berat = $1, tinggi = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3''', berat_float, tinggi_float, str(user_id))
             
             tanggal_ini = datetime.date.today()
             # FIX BUG #1: Guard insert
@@ -505,9 +556,9 @@ async def update_profile_web(user_id, berat, tinggi, target):
                 str(user_id), tanggal_ini
             )
             if existing:
-                await conn.execute("UPDATE weight_logs SET berat = $1 WHERE id = $2", float(berat), existing['id'])
+                await conn.execute("UPDATE weight_logs SET berat = $1 WHERE id = $2", berat_float, existing['id'])
             else:
-                await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, float(berat))
+                await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, berat_float)
             
             await conn.execute('''UPDATE gym_profile SET target = $1 WHERE user_id = $2''', target, str(user_id))
             
@@ -534,7 +585,12 @@ async def approve_user_access(user_id, days=3):
     try:
         async with await get_db() as conn:
             await conn.execute('''
-                UPDATE users SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval WHERE user_id = $2
+                UPDATE users 
+                SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval,
+                    is_banned = FALSE,
+                    banned_at = NULL,
+                    banned_reason = NULL
+                WHERE user_id = $2
             ''', str(days), str(user_id))
             return True
     except Exception as e:
@@ -548,4 +604,76 @@ async def reject_user_access(user_id):
             return True
     except Exception as e:
         logger.error(f"reject_user_access error: {e}")
+        return False
+    
+# ==========================================
+# --- FUNGSI ADMIN MONITORING & KICK (FASE B) ---
+# ==========================================
+
+async def update_last_active(user_id):
+    try:
+        async with await get_db() as conn:
+            await conn.execute("UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE user_id = $1", str(user_id))
+    except Exception:
+        pass # Silent error biar gak ngeganggu flow user
+
+async def admin_get_stats():
+    try:
+        async with await get_db() as conn:
+            total = await conn.fetchval("SELECT COUNT(*) FROM users")
+            active = await conn.fetchval("SELECT COUNT(*) FROM users WHERE premium_until > CURRENT_TIMESTAMP AND is_banned = FALSE")
+            expired = await conn.fetchval("SELECT COUNT(*) FROM users WHERE premium_until <= CURRENT_TIMESTAMP AND is_banned = FALSE")
+            banned = await conn.fetchval("SELECT COUNT(*) FROM users WHERE is_banned = TRUE")
+            bandel = await conn.fetchval("SELECT COUNT(*) FROM users WHERE premium_until <= CURRENT_TIMESTAMP AND is_banned = FALSE AND last_active_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'")
+            return {"total": total, "active": active, "expired": expired, "banned": banned, "bandel": bandel}
+    except Exception as e:
+        logger.error(f"admin_get_stats error: {e}")
+        return {"total": 0, "active": 0, "expired": 0, "banned": 0, "bandel": 0}
+
+async def admin_list_users(filter_type, offset=0, limit=5):
+    try:
+        async with await get_db() as conn:
+            if filter_type == 'active':
+                cond = "premium_until > CURRENT_TIMESTAMP AND is_banned = FALSE"
+            elif filter_type == 'expired':
+                cond = "premium_until <= CURRENT_TIMESTAMP AND is_banned = FALSE"
+            elif filter_type == 'banned':
+                cond = "is_banned = TRUE"
+            elif filter_type == 'bandel':
+                cond = "premium_until <= CURRENT_TIMESTAMP AND is_banned = FALSE AND last_active_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'"
+            else:
+                cond = "1=1"
+            
+            query = f"SELECT user_id, nama, premium_until, created_at, last_active_at, is_banned FROM users WHERE {cond} ORDER BY created_at DESC OFFSET $1 LIMIT $2"
+            users = await conn.fetch(query, offset, limit)
+            count = await conn.fetchval(f"SELECT COUNT(*) FROM users WHERE {cond}")
+            return users, count
+    except Exception as e:
+        logger.error(f"admin_list_users error: {e}")
+        return [], 0
+
+async def admin_kick_user(user_id, reason="Melanggar aturan / Tidak bayar"):
+    try:
+        async with await get_db() as conn:
+            await conn.execute('''
+                UPDATE users 
+                SET is_banned = TRUE, premium_until = CURRENT_TIMESTAMP, banned_at = CURRENT_TIMESTAMP, banned_reason = $1 
+                WHERE user_id = $2
+            ''', reason, str(user_id))
+            return True
+    except Exception as e:
+        logger.error(f"admin_kick_user error: {e}")
+        return False
+
+async def admin_unban_user(user_id, days=30):
+    try:
+        async with await get_db() as conn:
+            await conn.execute('''
+                UPDATE users 
+                SET is_banned = FALSE, banned_at = NULL, banned_reason = NULL, premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval 
+                WHERE user_id = $2
+            ''', str(days), str(user_id))
+            return True
+    except Exception as e:
+        logger.error(f"admin_unban_user error: {e}")
         return False

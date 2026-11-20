@@ -6,6 +6,8 @@ import os
 from urllib.parse import parse_qsl
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles  # ✅ TAMBAHAN BUAT FILE STATIS
+
 from database.queries import (
     catat_payment_event, aktifkan_premium, get_db, cek_status_vip, 
     tambah_food_log, tambah_air, update_user_weight, 
@@ -24,6 +26,10 @@ from bot_instance import bot
 
 logger = logging.getLogger(__name__)
 app = FastAPI()
+
+# ✅ MOUNT FOLDER STATIS (CSS & JS)
+# Ini ngasih tau FastAPI kalo ada request ke /static/... ambil dari folder webapp
+app.mount("/static", StaticFiles(directory="webapp"), name="static")
 
 def verify_telegram_data(init_data: str) -> dict:
     try:
@@ -152,7 +158,13 @@ async def log_water(request: Request):
 async def log_weight(request: Request):
     user_id = await get_vip_user(request)
     data = await request.json()
-    if await update_user_weight(user_id, float(data.get("berat", 0))): return {"status": "success"}
+    try:
+        berat = float(data.get("berat", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Berat harus berupa angka")
+    if not (20 <= berat <= 300):
+        raise HTTPException(status_code=400, detail="Berat gak masuk akal (harus 20-300 kg)")
+    if await update_user_weight(user_id, berat): return {"status": "success"}
     raise HTTPException(status_code=500)
 
 @app.post("/api/log_workout")
@@ -183,7 +195,16 @@ async def api_get_profile(request: Request):
 async def api_update_profile(request: Request):
     user_id = await get_vip_user(request)
     data = await request.json()
-    if await update_profile_web(user_id, float(data['berat']), float(data['tinggi']), data['target']): return {"status": "success"}
+    try:
+        berat = float(data['berat'])
+        tinggi = float(data['tinggi'])
+    except (TypeError, ValueError, KeyError):
+        raise HTTPException(status_code=400, detail="Berat/Tinggi harus diisi angka")
+    if not (20 <= berat <= 300):
+        raise HTTPException(status_code=400, detail="Berat gak masuk akal (harus 20-300 kg)")
+    if not (50 <= tinggi <= 250):
+        raise HTTPException(status_code=400, detail="Tinggi gak masuk akal (harus 50-250 cm)")
+    if await update_profile_web(user_id, berat, tinggi, data['target']): return {"status": "success"}
     raise HTTPException(status_code=500)
 
 @app.post("/api/gym_profile")
@@ -223,7 +244,6 @@ async def api_unified_history(request: Request):
     user_id = await get_vip_user(request)
     return {"history": await get_unified_history(user_id)}
 
-# FIX BUG BARU: delete_log handle workout + return 404 kalau gak ketemu
 @app.delete("/api/delete_log/{log_type}/{log_id}")
 async def delete_log(request: Request, log_type: str, log_id: int):
     user_id = await get_vip_user(request)

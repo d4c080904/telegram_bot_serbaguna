@@ -10,7 +10,7 @@ from keyboards.menus import (
     tombol_kembali, buat_tombol_gender
 )
 from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard, clear_gym_wizard
-from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode, cek_status_vip, get_statistik_user
+from database.queries import get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, set_chat_mode, cek_status_vip, get_statistik_user, get_user_full_stats
 from database.db import get_db
 from config import ADMIN_ID
 
@@ -38,7 +38,6 @@ async def buat_ringkasan_dashboard(user_id):
         f"⚖️ Berat: {berat_str}\n"
     )
 
-# ✅ FIX: Hapus "help" dari sini biar gak bentrok
 @router.message(Command("start", "menu"))
 async def kirim_sambutan(message: Message, state: FSMContext):
     try:
@@ -47,13 +46,7 @@ async def kirim_sambutan(message: Message, state: FSMContext):
         await set_chat_mode(user_id, False)
         await clear_gym_wizard(user_id)
         
-        user = await get_user_profile(user_id)
-        
-        if not user:
-            await set_onboarding_wizard(user_id, 'nama', {})
-            await message.answer("Halo bro! 👋 Sebelum mulai, kenalin diri lu dulu ya.\n\nSiapa <b>nama panggilan</b> lu?", parse_mode="HTML")
-            return
-            
+        # 1. CEK VIP DULU (Mencegah user baru nyangkut di onboarding)
         is_vip_db = await cek_status_vip(user_id)
         is_admin = (user_id == str(ADMIN_ID))
         is_vip = is_vip_db or is_admin 
@@ -69,16 +62,28 @@ async def kirim_sambutan(message: Message, state: FSMContext):
             )
             return
 
+        # 2. JIKA VIP, BARU CEK PROFIL (ONBOARDING)
+        user = await get_user_profile(user_id)
+        
+        if not user:
+            await set_onboarding_wizard(user_id, 'nama', {})
+            await message.answer("Halo bro! 👋 Sebelum mulai, kenalin diri lu dulu ya.\n\nSiapa <b>nama panggilan</b> lu?", parse_mode="HTML")
+            return
+
         ringkasan = await buat_ringkasan_dashboard(user_id)
         teks = f"Halo <b>{user['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         await message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
     except Exception as e:
         logger.error(f"[start] error: {e}")
 
-# ✅ FIX: Bikin handler khusus buat /help
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     try:
+        user_id = str(message.from_user.id)
+        is_vip_db = await cek_status_vip(user_id)
+        is_admin = (user_id == str(ADMIN_ID))
+        is_vip = is_vip_db or is_admin
+
         teks = (
             "❓ <b>BANTUAN & PANDUAN GYMBOT</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -92,9 +97,16 @@ async def cmd_help(message: Message):
             "<code>/start</code> — Buka menu utama\n"
             "<code>/gym</code> — Langsung ke menu program gym\n"
             "<code>/stats</code> — Lihat statistik lu\n"
+            "<code>/myprogress</code> — Progres sepanjang masa\n"
             "<code>/cancel</code> — Batalin input yang lagi jalan"
         )
-        await message.answer(teks, parse_mode="HTML", reply_markup=tombol_kembali())
+        
+        builder = InlineKeyboardBuilder()
+        if not is_vip:
+            builder.button(text="🔓 Minta Izin Akses", callback_data="req_access")
+        builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama")
+        
+        await message.answer(teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e:
         logger.error(f"[cmd_help] error: {e}")
 
@@ -221,6 +233,60 @@ async def cmd_stats(message: Message):
     except Exception as e:
         logger.error(f"[cmd_stats] error: {e}")
 
+@router.message(Command("myprogress"))
+async def cmd_myprogress(message: Message):
+    try:
+        import datetime
+        user_id = str(message.from_user.id)
+        stats = await get_user_full_stats(user_id)
+        
+        if not stats or stats['days_active'] == 0:
+            await message.answer(
+                "📊 <b>Belum ada data progres</b>\n\n"
+                "Mulai catat makanan, air minum, atau latihan dulu ya.\n"
+                "Gunakan tombol di menu utama.",
+                parse_mode="HTML",
+                reply_markup=tombol_kembali()
+            )
+            return
+        
+        weight_str = "Belum ada data"
+        if stats['first_weight'] and stats['last_weight']:
+            diff = stats['last_weight'] - stats['first_weight']
+            if diff > 0:
+                weight_str = f"{stats['first_weight']} → {stats['last_weight']} kg (🔴 +{diff:.1f} kg)"
+            elif diff < 0:
+                weight_str = f"{stats['first_weight']} → {stats['last_weight']} kg (🟢 {diff:.1f} kg)"
+            else:
+                weight_str = f"{stats['first_weight']} → {stats['last_weight']} kg (⚪ Stabil)"
+        elif stats['last_weight']:
+            weight_str = f"{stats['last_weight']} kg"
+            
+        teks = (
+            "📊 <b>PROGRES LU SEJAUH INI</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📅 Aktif sejak: <b>{stats['first_date']}</b>\n"
+            f"⏱️ Total hari aktif: <b>{stats['days_active']} hari</b>\n\n"
+            f"🍽️ <b>MAKANAN</b>\n"
+            f"   • Dicatat: <b>{stats['total_food']} kali</b>\n"
+            f"   • Total kalori: <b>{stats['total_kalori']:,} kcal</b>\n\n"
+            f"💧 <b>AIR MINUM</b>\n"
+            f"   • Dicatat: <b>{stats['total_water']} kali</b>\n"
+            f"   • Total air: <b>{stats['total_water_ml']:,} ml</b>\n\n"
+            f"🏋️ <b>LATIHAN</b>\n"
+            f"   • Dicatat: <b>{stats['total_workout']} kali</b>\n"
+            f"   • Total kalori terbakar: <b>{stats['total_burned']:,} kcal</b>\n\n"
+            f"⚖️ <b>BERAT BADAN</b>\n"
+            f"   • {weight_str}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "Terus konsisten ya bro! 💪"
+        )
+        
+        await message.answer(teks, parse_mode="HTML", reply_markup=tombol_kembali())
+    except Exception as e:
+        logger.error(f"[cmd_myprogress] error: {e}")
+        await message.answer("❌ Gagal ambil data progres. Coba lagi nanti.")
+
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
     try:
@@ -255,6 +321,11 @@ async def callback_menu_stats(callback: CallbackQuery):
 async def callback_menu_help(callback: CallbackQuery):
     try:
         await callback.answer()
+        user_id = str(callback.from_user.id)
+        is_vip_db = await cek_status_vip(user_id)
+        is_admin = (user_id == str(ADMIN_ID))
+        is_vip = is_vip_db or is_admin
+
         teks = (
             "❓ <b>BANTUAN & PANDUAN GYMBOT</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -268,8 +339,15 @@ async def callback_menu_help(callback: CallbackQuery):
             "<code>/start</code> — Buka menu utama\n"
             "<code>/gym</code> — Langsung ke menu program gym\n"
             "<code>/stats</code> — Lihat statistik lu\n"
+            "<code>/myprogress</code> — Progres sepanjang masa\n"
             "<code>/cancel</code> — Batalin input yang lagi jalan"
         )
-        try: await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=tombol_kembali())
-        except Exception: await callback.message.answer(teks, parse_mode="HTML", reply_markup=tombol_kembali())
+        
+        builder = InlineKeyboardBuilder()
+        if not is_vip:
+            builder.button(text="🔓 Minta Izin Akses", callback_data="req_access")
+        builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama")
+        
+        try: await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception: await callback.message.answer(teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e: logger.error(f"[menu_help] error: {e}")

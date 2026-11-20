@@ -40,6 +40,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="meal", description="🍳 Meal Planner"),
         BotCommand(command="pdf", description="📄 Laporan PDF"),
         BotCommand(command="stats", description="📊 Statistik"),
+        BotCommand(command="myprogress", description="📊 Progres sepanjang masa"),
         BotCommand(command="help", description="❓ Bantuan"),
         BotCommand(command="cancel", description="❌ Batalin Aksi"),
     ]

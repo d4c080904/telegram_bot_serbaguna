@@ -112,4 +112,17 @@ async def setup_db():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_workout_user ON workout_logs(user_id, tanggal)")
         await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_food_user_photohash ON food_logs(user_id, photo_hash) WHERE photo_hash IS NOT NULL")
         
+        # =====================================================================
+        # --- FASE A: PERSIAPAN ADMIN MONITORING (Fase B) ---
+        # =====================================================================
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT FALSE")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMP")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_reason TEXT")
+        
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_banned ON users(is_banned) WHERE is_banned = TRUE")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_premium ON users(premium_until)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active_at)")
+        # =====================================================================
+        
         logger.info("✅ Semua tabel PostgreSQL siap")
