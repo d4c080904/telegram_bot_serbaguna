@@ -41,6 +41,7 @@ async def buat_ringkasan_dashboard(user_id):
 @router.message(Command("start", "menu"))
 async def kirim_sambutan(message: Message, state: FSMContext):
     try:
+        logger.info(f"User {message.from_user.id} mencet /start") # DETEKTIF LOG
         await state.clear()
         user_id = str(message.from_user.id)
         await set_chat_mode(user_id, False)
@@ -52,13 +53,15 @@ async def kirim_sambutan(message: Message, state: FSMContext):
         is_vip = is_vip_db or is_admin 
 
         if not is_vip:
+            logger.info(f"User {user_id} bukan VIP, ngirim menu Minta Akses.") # DETEKTIF LOG
             builder = InlineKeyboardBuilder()
             builder.button(text="🔓 Minta Izin Akses", callback_data="req_access")
             await message.answer(
                 "🔒 <b>AKSES TERBATAS</b>\n\n"
                 "Bot ini masih dalam tahap uji coba terbatas.\n"
                 "Silakan minta izin akses ke Admin untuk bisa menggunakan bot ini.",
-                reply_markup=builder.as_markup()
+                reply_markup=builder.as_markup(),
+                parse_mode="HTML" # FIX: Tambahin ini biar teksnya bener
             )
             return
 
@@ -66,10 +69,12 @@ async def kirim_sambutan(message: Message, state: FSMContext):
         user = await get_user_profile(user_id)
         
         if not user:
+            logger.info(f"User {user_id} VIP tapi belum punya profil, masuk Onboarding.") # DETEKTIF LOG
             await set_onboarding_wizard(user_id, 'nama', {})
             await message.answer("Halo bro! 👋 Sebelum mulai, kenalin diri lu dulu ya.\n\nSiapa <b>nama panggilan</b> lu?", parse_mode="HTML")
             return
 
+        logger.info(f"User {user_id} VIP dan punya profil, masuk Dashboard.") # DETEKTIF LOG
         ringkasan = await buat_ringkasan_dashboard(user_id)
         teks = f"Halo <b>{user['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
         await message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
