@@ -6,7 +6,7 @@ import os
 from urllib.parse import parse_qsl
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles  # ✅ TAMBAHAN BUAT FILE STATIS
+from fastapi.staticfiles import StaticFiles
 
 from database.queries import (
     catat_payment_event, aktifkan_premium, get_db, cek_status_vip, 
@@ -15,7 +15,8 @@ from database.queries import (
     hapus_water_log_by_id, hapus_weight_log_by_id, hapus_workout_log_by_id,
     tambah_workout_log, get_statistik_user,
     get_user_profile, get_gym_profile, update_profile_web, save_gym_profile,
-    ambil_chat_history, simpan_chat_message, hapus_chat_history
+    ambil_chat_history, simpan_chat_message, hapus_chat_history,
+    get_user_streak, update_streak # <--- TAMBAHAN
 )
 from services.ai import analisis_foto_makanan, analisis_teks_makanan, estimasi_kalori_olahraga, analisis_alat_gym, rekomendasi_makanan
 from services.pt_chat import proses_chat_pt_core
@@ -27,8 +28,6 @@ from bot_instance import bot
 logger = logging.getLogger(__name__)
 app = FastAPI()
 
-# ✅ MOUNT FOLDER STATIS (CSS & JS)
-# Ini ngasih tau FastAPI kalo ada request ke /static/... ambil dari folder webapp
 app.mount("/static", StaticFiles(directory="webapp"), name="static")
 
 def verify_telegram_data(init_data: str) -> dict:
@@ -87,7 +86,13 @@ async def get_chart_data(request: Request):
         async with await get_db() as conn:
             daily = await conn.fetch("SELECT tanggal, total_kalori_masuk, total_kalori_keluar, total_air FROM daily_logs WHERE user_id = $1 ORDER BY tanggal DESC LIMIT 7", user_id)
             weight = await conn.fetch("SELECT tanggal, berat FROM weight_logs WHERE user_id = $1 ORDER BY tanggal DESC LIMIT 7", user_id)
-            return {"daily": [dict(row) for row in reversed(daily)], "weight": [dict(row) for row in reversed(weight)]}
+            streak = await get_user_streak(user_id) # <--- AMBIL DATA STREAK
+            
+            return {
+                "daily": [dict(row) for row in reversed(daily)], 
+                "weight": [dict(row) for row in reversed(weight)],
+                "streak": streak # <--- KIRIM KE FRONTEND
+            }
     except Exception as e: return {"error": str(e)}
 
 @app.post("/api/log_food")
@@ -103,7 +108,10 @@ async def log_food(request: Request, food_text: str = Form(None), food_image: Up
         
         if not hasil: raise HTTPException(status_code=400, detail="AI gagal menganalisis.")
         berhasil = await tambah_food_log(user_id, 0, 0, None, hasil.get('nama_makanan', 'Makanan'), hasil.get('estimasi_porsi', '1 porsi'), hasil.get('kalori', 0), hasil.get('protein', 0), hasil.get('karbo', 0), hasil.get('lemak', 0), hasil.get('gula', 0))
+        
         if not berhasil: raise HTTPException(status_code=500, detail="Gagal simpan ke database")
+        
+        await update_streak(user_id) # <--- UPDATE STREAK KETIKA LOG MAKANAN DARI WEB
         return {"status": "success", "data": hasil}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
@@ -118,6 +126,7 @@ async def api_log_barcode(request: Request, barcode_image: UploadFile = File(...
         if not produk: raise HTTPException(status_code=404, detail="Produk tidak ditemukan di database.")
         berhasil = await tambah_food_log(user_id, 0, 0, barcode_num, f"{produk['nama']} ({produk['kategori']})", "1 porsi (100g)", produk['kalori'], produk['protein'], produk['karbo'], produk['lemak'], produk['gula'])
         if not berhasil: raise HTTPException(status_code=500, detail="Gagal menyimpan data.")
+        await update_streak(user_id) # <--- UPDATE STREAK KETIKA SCAN BARCODE
         return {"status": "success", "data": produk}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
@@ -158,12 +167,9 @@ async def log_water(request: Request):
 async def log_weight(request: Request):
     user_id = await get_vip_user(request)
     data = await request.json()
-    try:
-        berat = float(data.get("berat", 0))
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="Berat harus berupa angka")
-    if not (20 <= berat <= 300):
-        raise HTTPException(status_code=400, detail="Berat gak masuk akal (harus 20-300 kg)")
+    try: berat = float(data.get("berat", 0))
+    except (TypeError, ValueError): raise HTTPException(status_code=400, detail="Berat harus berupa angka")
+    if not (20 <= berat <= 300): raise HTTPException(status_code=400, detail="Berat gak masuk akal (harus 20-300 kg)")
     if await update_user_weight(user_id, berat): return {"status": "success"}
     raise HTTPException(status_code=500)
 
@@ -196,14 +202,11 @@ async def api_update_profile(request: Request):
     user_id = await get_vip_user(request)
     data = await request.json()
     try:
-        berat = float(data['berat'])
-        tinggi = float(data['tinggi'])
+        berat = float(data['berat']); tinggi = float(data['tinggi'])
     except (TypeError, ValueError, KeyError):
         raise HTTPException(status_code=400, detail="Berat/Tinggi harus diisi angka")
-    if not (20 <= berat <= 300):
-        raise HTTPException(status_code=400, detail="Berat gak masuk akal (harus 20-300 kg)")
-    if not (50 <= tinggi <= 250):
-        raise HTTPException(status_code=400, detail="Tinggi gak masuk akal (harus 50-250 cm)")
+    if not (20 <= berat <= 300): raise HTTPException(status_code=400, detail="Berat gak masuk akal (harus 20-300 kg)")
+    if not (50 <= tinggi <= 250): raise HTTPException(status_code=400, detail="Tinggi gak masuk akal (harus 50-250 cm)")
     if await update_profile_web(user_id, berat, tinggi, data['target']): return {"status": "success"}
     raise HTTPException(status_code=500)
 
@@ -247,18 +250,12 @@ async def api_unified_history(request: Request):
 @app.delete("/api/delete_log/{log_type}/{log_id}")
 async def delete_log(request: Request, log_type: str, log_id: int):
     user_id = await get_vip_user(request)
-    if log_type == 'food':
-        berhasil = await hapus_food_log_by_id(user_id, log_id)
-    elif log_type == 'water':
-        berhasil = await hapus_water_log_by_id(user_id, log_id)
-    elif log_type == 'weight':
-        berhasil = await hapus_weight_log_by_id(user_id, log_id)
-    elif log_type == 'workout':
-        berhasil = await hapus_workout_log_by_id(user_id, log_id)
-    else:
-        raise HTTPException(status_code=400, detail="Tipe log tidak valid")
-    if not berhasil:
-        raise HTTPException(status_code=404, detail="Log tidak ditemukan")
+    if log_type == 'food': berhasil = await hapus_food_log_by_id(user_id, log_id)
+    elif log_type == 'water': berhasil = await hapus_water_log_by_id(user_id, log_id)
+    elif log_type == 'weight': berhasil = await hapus_weight_log_by_id(user_id, log_id)
+    elif log_type == 'workout': berhasil = await hapus_workout_log_by_id(user_id, log_id)
+    else: raise HTTPException(status_code=400, detail="Tipe log tidak valid")
+    if not berhasil: raise HTTPException(status_code=404, detail="Log tidak ditemukan")
     return {"status": "success"}
 
 @app.get("/", response_class=HTMLResponse)

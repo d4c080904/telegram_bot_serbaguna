@@ -26,7 +26,7 @@ async def get_user_profile(user_id):
 async def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
     try:
         async with await get_db() as conn:
-            berat_float = round(float(berat), 1)  # FIX: hindari noise float
+            berat_float = round(float(berat), 1)
             await conn.execute('''INSERT INTO user_profiles (user_id, nama, umur, berat, tinggi, jenis_kelamin, updated_at) 
                          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
                          ON CONFLICT (user_id) DO UPDATE SET 
@@ -40,7 +40,6 @@ async def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
                       str(user_id), nama, int(umur), float(tinggi), jenis_kelamin)
 
             tanggal_ini = datetime.date.today()
-            # FIX BUG #1: Guard insert — update kalau hari ini sudah ada, insert kalau belum
             existing = await conn.fetchrow(
                 "SELECT id FROM weight_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id DESC LIMIT 1",
                 str(user_id), tanggal_ini
@@ -55,10 +54,9 @@ async def save_user_profile(user_id, nama, umur, berat, tinggi, jenis_kelamin):
 async def update_user_weight(user_id, berat_baru):
     try:
         async with await get_db() as conn:
-            berat_float = round(float(parse_number(berat_baru)), 1)  # FIX: hindari noise float
+            berat_float = round(float(parse_number(berat_baru)), 1)
             await conn.execute("UPDATE user_profiles SET berat = $1 WHERE user_id = $2", berat_float, str(user_id))
             tanggal_ini = datetime.date.today()
-            # FIX BUG #1: Guard insert
             existing = await conn.fetchrow(
                 "SELECT id FROM weight_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id DESC LIMIT 1",
                 str(user_id), tanggal_ini
@@ -180,9 +178,7 @@ async def tambah_food_log(user_id, message_id, photo_message_id, photo_hash, nam
             return True
             
     except Exception as e:
-        if "duplicate key value violates unique constraint" in str(e):
-            logger.warning(f"⚠️ Duplikat dicegah DB: user {user_id}, hash {photo_hash}")
-            return False
+        if "duplicate key value violates unique constraint" in str(e): return False
         logger.error(f"tambah_food_log error: {e}")
         return False
 
@@ -305,9 +301,7 @@ async def get_berat_14_hari_terakhir(user_id):
                 ORDER BY tanggal ASC
             ''', str(user_id))
             return rows
-    except Exception as e: 
-        logger.error(f"get_berat_14_hari_terakhir error: {e}")
-        return []
+    except Exception as e: logger.error(f"get_berat_14_hari_terakhir error: {e}"); return []
 
 async def tambah_workout_log(user_id, olahraga, durasi, kalori_terbakar):
     try:
@@ -317,9 +311,7 @@ async def tambah_workout_log(user_id, olahraga, durasi, kalori_terbakar):
                          VALUES ($1, $2, $3, $4, $5)''', 
                       str(user_id), tanggal_ini, olahraga, int(durasi), int(kalori_terbakar))
             return True
-    except Exception as e: 
-        logger.error(f"tambah_workout_log error: {e}")
-        return False
+    except Exception as e: logger.error(f"tambah_workout_log error: {e}"); return False
 
 async def get_total_kalori_terbakar_hari_ini(user_id):
     try:
@@ -327,40 +319,28 @@ async def get_total_kalori_terbakar_hari_ini(user_id):
             tanggal_ini = datetime.date.today()
             row = await conn.fetchrow("SELECT SUM(kalori_terbakar) as total FROM workout_logs WHERE user_id = $1 AND tanggal = $2", str(user_id), tanggal_ini)
             return row['total'] if row['total'] else 0
-    except Exception as e: 
-        logger.error(f"get_total_kalori_terbakar error: {e}")
-        return 0
+    except Exception as e: logger.error(f"get_total_kalori_terbakar error: {e}"); return 0
 
 async def get_history_workout_hari_ini(user_id):
     try:
         async with await get_db() as conn:
             tanggal_ini = datetime.date.today()
             return await conn.fetch("SELECT olahraga, durasi, kalori_terbakar, waktu FROM workout_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id ASC", str(user_id), tanggal_ini)
-    except Exception as e: 
-        logger.error(f"get_history_workout error: {e}")
-        return []
+    except Exception as e: logger.error(f"get_history_workout error: {e}"); return []
 
 async def get_daily_logs(user_id, tanggal_str):
     try:
         async with await get_db() as conn:
             row = await conn.fetchrow("SELECT * FROM daily_logs WHERE user_id = $1 AND tanggal = $2", str(user_id), tanggal_str)
             return row
-    except Exception as e: 
-        logger.error(f"get_daily_logs error: {e}")
-        return None
+    except Exception as e: logger.error(f"get_daily_logs error: {e}"); return None
 
 async def set_user_premium(user_id, days):
     try:
         async with await get_db() as conn:
-            await conn.execute('''
-                UPDATE users 
-                SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval 
-                WHERE user_id = $2
-            ''', str(days), str(user_id))
+            await conn.execute('''UPDATE users SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval WHERE user_id = $2''', str(days), str(user_id))
             return True
-    except Exception as e: 
-        logger.error(f"set_user_premium error: {e}")
-        return False
+    except Exception as e: logger.error(f"set_user_premium error: {e}"); return False
 
 async def get_user_premium_status(user_id):
     try:
@@ -370,34 +350,21 @@ async def get_user_premium_status(user_id):
                 if row['premium_until'] > datetime.datetime.now():
                     return True, row['premium_until']
             return False, None
-    except Exception as e: 
-        logger.error(f"get_user_premium_status error: {e}")
-        return False, None
+    except Exception as e: logger.error(f"get_user_premium_status error: {e}"); return False, None
 
 async def catat_payment_event(transaction_id, user_id, amount, status):
     try:
         async with await get_db() as conn:
-            result = await conn.execute('''
-                INSERT INTO payment_events (transaction_id, user_id, amount, status) 
-                VALUES ($1, $2, $3, $4) ON CONFLICT (transaction_id) DO NOTHING
-            ''', transaction_id, str(user_id), int(amount), status)
+            result = await conn.execute('''INSERT INTO payment_events (transaction_id, user_id, amount, status) VALUES ($1, $2, $3, $4) ON CONFLICT (transaction_id) DO NOTHING''', transaction_id, str(user_id), int(amount), status)
             return "INSERT" in result
-    except Exception as e: 
-        logger.error(f"catat_payment_event error: {e}")
-        return False
+    except Exception as e: logger.error(f"catat_payment_event error: {e}"); return False
 
 async def aktifkan_premium(user_id, days=30):
     try:
         async with await get_db() as conn:
-            await conn.execute('''
-                UPDATE users 
-                SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval 
-                WHERE user_id = $2
-            ''', str(days), str(user_id))
+            await conn.execute('''UPDATE users SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval WHERE user_id = $2''', str(days), str(user_id))
             return True
-    except Exception as e: 
-        logger.error(f"aktifkan_premium error: {e}")
-        return False
+    except Exception as e: logger.error(f"aktifkan_premium error: {e}"); return False
 
 async def cek_status_vip(user_id):
     try:
@@ -407,37 +374,16 @@ async def cek_status_vip(user_id):
                 if row['premium_until'] > datetime.datetime.now():
                     return True
             return False
-    except Exception as e:
-        logger.error(f"cek_status_vip error: {e}")
-        return False
+    except Exception as e: logger.error(f"cek_status_vip error: {e}"); return False
 
-# ==========================================
-# --- UNIFIED TIMELINE (MAKANAN, AIR, BERAT, WORKOUT) ---
-# ==========================================
 async def get_unified_history(user_id):
     try:
         async with await get_db() as conn:
             tanggal_ini = datetime.date.today()
-            
-            food = await conn.fetch('''
-                SELECT id, 'food' as type, nama_makanan as title, kalori as value, NULL::INTEGER as durasi, waktu 
-                FROM food_logs WHERE user_id = $1 AND tanggal = $2
-            ''', str(user_id), tanggal_ini)
-            
-            water = await conn.fetch('''
-                SELECT id, 'water' as type, 'Air Minum' as title, ml as value, NULL::INTEGER as durasi, waktu 
-                FROM water_logs WHERE user_id = $1 AND tanggal = $2
-            ''', str(user_id), tanggal_ini)
-            
-            weight = await conn.fetch('''
-                SELECT id, 'weight' as type, 'Timbang Berat' as title, berat as value, NULL::INTEGER as durasi, waktu 
-                FROM weight_logs WHERE user_id = $1 AND tanggal = $2
-            ''', str(user_id), tanggal_ini)
-
-            workout = await conn.fetch('''
-                SELECT id, 'workout' as type, olahraga as title, kalori_terbakar as value, durasi, waktu 
-                FROM workout_logs WHERE user_id = $1 AND tanggal = $2
-            ''', str(user_id), tanggal_ini)
+            food = await conn.fetch('''SELECT id, 'food' as type, nama_makanan as title, kalori as value, NULL::INTEGER as durasi, waktu FROM food_logs WHERE user_id = $1 AND tanggal = $2''', str(user_id), tanggal_ini)
+            water = await conn.fetch('''SELECT id, 'water' as type, 'Air Minum' as title, ml as value, NULL::INTEGER as durasi, waktu FROM water_logs WHERE user_id = $1 AND tanggal = $2''', str(user_id), tanggal_ini)
+            weight = await conn.fetch('''SELECT id, 'weight' as type, 'Timbang Berat' as title, berat as value, NULL::INTEGER as durasi, waktu FROM weight_logs WHERE user_id = $1 AND tanggal = $2''', str(user_id), tanggal_ini)
+            workout = await conn.fetch('''SELECT id, 'workout' as type, olahraga as title, kalori_terbakar as value, durasi, waktu FROM workout_logs WHERE user_id = $1 AND tanggal = $2''', str(user_id), tanggal_ini)
             
             all_logs = list(food) + list(water) + list(weight) + list(workout)
             all_logs.sort(key=lambda x: x['waktu'] or datetime.datetime.min, reverse=True)
@@ -446,18 +392,11 @@ async def get_unified_history(user_id):
             for row in all_logs:
                 r = dict(row)
                 if r['waktu']: r['waktu'] = r['waktu'].strftime("%H:%M")
-                if r['type'] == 'weight' and r['value'] is not None:
-                    r['value'] = round(float(r['value']), 1)
+                if r['type'] == 'weight' and r['value'] is not None: r['value'] = round(float(r['value']), 1)
                 result.append(r)
-                
             return result
-    except Exception as e:
-        logger.error(f"get_unified_history error: {e}")
-        return []
+    except Exception as e: logger.error(f"get_unified_history error: {e}"); return []
 
-# ==========================================
-# --- FUNGSI DELETE PER TIPE LOG ---
-# ==========================================
 async def hapus_water_log_by_id(user_id, log_id):
     try:
         async with await get_db() as conn:
@@ -485,137 +424,73 @@ async def get_statistik_user(user_id):
             jumlah_makan = await conn.fetchval("SELECT COUNT(*) FROM food_logs WHERE user_id = $1", str(user_id))
             jumlah_air = await conn.fetchval("SELECT COUNT(*) FROM water_logs WHERE user_id = $1", str(user_id))
             jumlah_gym = await conn.fetchval("SELECT COUNT(*) FROM workout_logs WHERE user_id = $1", str(user_id))
-            return {
-                "makanan": jumlah_makan,
-                "air": jumlah_air,
-                "gym": jumlah_gym
-            }
-    except Exception as e:
-        logger.error(f"get_statistik_user error: {e}")
-        return {"makanan": 0, "air": 0, "gym": 0}
+            return {"makanan": jumlah_makan, "air": jumlah_air, "gym": jumlah_gym}
+    except Exception as e: logger.error(f"get_statistik_user error: {e}"); return {"makanan": 0, "air": 0, "gym": 0}
 
 async def get_user_full_stats(user_id):
-    """Statistik lengkap sepanjang masa untuk /myprogress"""
     try:
         async with await get_db() as conn:
             total_food = await conn.fetchval("SELECT COUNT(*) FROM food_logs WHERE user_id = $1", str(user_id))
             total_water = await conn.fetchval("SELECT COUNT(*) FROM water_logs WHERE user_id = $1", str(user_id))
             total_workout = await conn.fetchval("SELECT COUNT(*) FROM workout_logs WHERE user_id = $1", str(user_id))
-            
-            days_active = await conn.fetchval("""
-                SELECT COUNT(DISTINCT tanggal) FROM (
-                    SELECT tanggal FROM food_logs WHERE user_id = $1
-                    UNION SELECT tanggal FROM water_logs WHERE user_id = $1
-                    UNION SELECT tanggal FROM workout_logs WHERE user_id = $1
-                    UNION SELECT tanggal FROM weight_logs WHERE user_id = $1
-                ) t
-            """, str(user_id))
-            
+            days_active = await conn.fetchval("SELECT COUNT(DISTINCT tanggal) FROM (SELECT tanggal FROM food_logs WHERE user_id = $1 UNION SELECT tanggal FROM water_logs WHERE user_id = $1 UNION SELECT tanggal FROM workout_logs WHERE user_id = $1 UNION SELECT tanggal FROM weight_logs WHERE user_id = $1) t", str(user_id))
             total_water_ml = await conn.fetchval("SELECT COALESCE(SUM(ml), 0) FROM water_logs WHERE user_id = $1", str(user_id))
             total_kalori = await conn.fetchval("SELECT COALESCE(SUM(kalori), 0) FROM food_logs WHERE user_id = $1", str(user_id))
             total_burned = await conn.fetchval("SELECT COALESCE(SUM(kalori_terbakar), 0) FROM workout_logs WHERE user_id = $1", str(user_id))
-            
             first_weight = await conn.fetchval("SELECT berat FROM weight_logs WHERE user_id = $1 ORDER BY tanggal ASC, id ASC LIMIT 1", str(user_id))
             last_weight = await conn.fetchval("SELECT berat FROM weight_logs WHERE user_id = $1 ORDER BY tanggal DESC, id DESC LIMIT 1", str(user_id))
-            
-            first_date = await conn.fetchval("""
-                SELECT MIN(tanggal) FROM (
-                    SELECT tanggal FROM food_logs WHERE user_id = $1
-                    UNION SELECT tanggal FROM water_logs WHERE user_id = $1
-                    UNION SELECT tanggal FROM workout_logs WHERE user_id = $1
-                ) t
-            """, str(user_id))
+            first_date = await conn.fetchval("SELECT MIN(tanggal) FROM (SELECT tanggal FROM food_logs WHERE user_id = $1 UNION SELECT tanggal FROM water_logs WHERE user_id = $1 UNION SELECT tanggal FROM workout_logs WHERE user_id = $1) t", str(user_id))
             
             return {
-                "total_food": total_food or 0,
-                "total_water": total_water or 0,
-                "total_workout": total_workout or 0,
-                "days_active": days_active or 0,
-                "total_water_ml": total_water_ml or 0,
-                "total_kalori": total_kalori or 0,
-                "total_burned": total_burned or 0,
-                "first_weight": round(float(first_weight), 1) if first_weight else None,
-                "last_weight": round(float(last_weight), 1) if last_weight else None,
-                "first_date": first_date
+                "total_food": total_food or 0, "total_water": total_water or 0, "total_workout": total_workout or 0,
+                "days_active": days_active or 0, "total_water_ml": total_water_ml or 0, "total_kalori": total_kalori or 0, "total_burned": total_burned or 0,
+                "first_weight": round(float(first_weight), 1) if first_weight else None, "last_weight": round(float(last_weight), 1) if last_weight else None, "first_date": first_date
             }
-    except Exception as e:
-        logger.error(f"get_user_full_stats error: {e}")
-        return None
+    except Exception as e: logger.error(f"get_user_full_stats error: {e}"); return None
 
 async def update_profile_web(user_id, berat, tinggi, target):
     try:
         async with await get_db() as conn:
-            berat_float = round(float(berat), 1)  # FIX: hindari noise float
+            berat_float = round(float(berat), 1)
             tinggi_float = float(tinggi)
             await conn.execute('''UPDATE user_profiles SET berat = $1, tinggi = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3''', berat_float, tinggi_float, str(user_id))
-            
             tanggal_ini = datetime.date.today()
-            # FIX BUG #1: Guard insert
-            existing = await conn.fetchrow(
-                "SELECT id FROM weight_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id DESC LIMIT 1",
-                str(user_id), tanggal_ini
-            )
-            if existing:
-                await conn.execute("UPDATE weight_logs SET berat = $1 WHERE id = $2", berat_float, existing['id'])
-            else:
-                await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, berat_float)
-            
+            existing = await conn.fetchrow("SELECT id FROM weight_logs WHERE user_id = $1 AND tanggal = $2 ORDER BY id DESC LIMIT 1", str(user_id), tanggal_ini)
+            if existing: await conn.execute("UPDATE weight_logs SET berat = $1 WHERE id = $2", berat_float, existing['id'])
+            else: await conn.execute("INSERT INTO weight_logs (user_id, tanggal, berat) VALUES ($1, $2, $3)", str(user_id), tanggal_ini, berat_float)
             await conn.execute('''UPDATE gym_profile SET target = $1 WHERE user_id = $2''', target, str(user_id))
-            
             return True
-    except Exception as e:
-        logger.error(f"update_profile_web error: {e}")
-        return False
+    except Exception as e: logger.error(f"update_profile_web error: {e}"); return False
 
-# ==========================================
-# --- FUNGSI SISTEM IZIN AKSES (INVITE ONLY) ---
-# ==========================================
 async def request_access_db(user_id, username):
     try:
         async with await get_db() as conn:
-            await conn.execute('''
-                INSERT INTO users (user_id, nama) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING
-            ''', str(user_id), username)
+            await conn.execute('''INSERT INTO users (user_id, nama) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING''', str(user_id), username)
             return True
-    except Exception as e:
-        logger.error(f"request_access_db error: {e}")
-        return False
+    except Exception as e: logger.error(f"request_access_db error: {e}"); return False
 
 async def approve_user_access(user_id, days=3):
     try:
         async with await get_db() as conn:
-            await conn.execute('''
-                UPDATE users 
-                SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval,
-                    is_banned = FALSE,
-                    banned_at = NULL,
-                    banned_reason = NULL
-                WHERE user_id = $2
-            ''', str(days), str(user_id))
+            await conn.execute('''UPDATE users SET premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval, is_banned = FALSE, banned_at = NULL, banned_reason = NULL WHERE user_id = $2''', str(days), str(user_id))
             return True
-    except Exception as e:
-        logger.error(f"approve_user_access error: {e}")
-        return False
+    except Exception as e: logger.error(f"approve_user_access error: {e}"); return False
 
 async def reject_user_access(user_id):
     try:
         async with await get_db() as conn:
             await conn.execute('DELETE FROM users WHERE user_id = $1', str(user_id))
             return True
-    except Exception as e:
-        logger.error(f"reject_user_access error: {e}")
-        return False
-    
-# ==========================================
-# --- FUNGSI ADMIN MONITORING & KICK (FASE B) ---
-# ==========================================
+    except Exception as e: logger.error(f"reject_user_access error: {e}"); return False
 
+# ==========================================
+# --- FUNGSI ADMIN MONITORING & KICK ---
+# ==========================================
 async def update_last_active(user_id):
     try:
         async with await get_db() as conn:
             await conn.execute("UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE user_id = $1", str(user_id))
-    except Exception:
-        pass # Silent error biar gak ngeganggu flow user
+    except Exception: pass
 
 async def admin_get_stats():
     try:
@@ -626,54 +501,94 @@ async def admin_get_stats():
             banned = await conn.fetchval("SELECT COUNT(*) FROM users WHERE is_banned = TRUE")
             bandel = await conn.fetchval("SELECT COUNT(*) FROM users WHERE premium_until <= CURRENT_TIMESTAMP AND is_banned = FALSE AND last_active_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'")
             return {"total": total, "active": active, "expired": expired, "banned": banned, "bandel": bandel}
-    except Exception as e:
-        logger.error(f"admin_get_stats error: {e}")
-        return {"total": 0, "active": 0, "expired": 0, "banned": 0, "bandel": 0}
+    except Exception as e: logger.error(f"admin_get_stats error: {e}"); return {"total": 0, "active": 0, "expired": 0, "banned": 0, "bandel": 0}
 
 async def admin_list_users(filter_type, offset=0, limit=5):
     try:
         async with await get_db() as conn:
-            if filter_type == 'active':
-                cond = "premium_until > CURRENT_TIMESTAMP AND is_banned = FALSE"
-            elif filter_type == 'expired':
-                cond = "premium_until <= CURRENT_TIMESTAMP AND is_banned = FALSE"
-            elif filter_type == 'banned':
-                cond = "is_banned = TRUE"
-            elif filter_type == 'bandel':
-                cond = "premium_until <= CURRENT_TIMESTAMP AND is_banned = FALSE AND last_active_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'"
-            else:
-                cond = "1=1"
-            
+            if filter_type == 'active': cond = "premium_until > CURRENT_TIMESTAMP AND is_banned = FALSE"
+            elif filter_type == 'expired': cond = "premium_until <= CURRENT_TIMESTAMP AND is_banned = FALSE"
+            elif filter_type == 'banned': cond = "is_banned = TRUE"
+            elif filter_type == 'bandel': cond = "premium_until <= CURRENT_TIMESTAMP AND is_banned = FALSE AND last_active_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'"
+            else: cond = "1=1"
             query = f"SELECT user_id, nama, premium_until, created_at, last_active_at, is_banned FROM users WHERE {cond} ORDER BY created_at DESC OFFSET $1 LIMIT $2"
             users = await conn.fetch(query, offset, limit)
             count = await conn.fetchval(f"SELECT COUNT(*) FROM users WHERE {cond}")
             return users, count
-    except Exception as e:
-        logger.error(f"admin_list_users error: {e}")
-        return [], 0
+    except Exception as e: logger.error(f"admin_list_users error: {e}"); return [], 0
 
 async def admin_kick_user(user_id, reason="Melanggar aturan / Tidak bayar"):
     try:
         async with await get_db() as conn:
-            await conn.execute('''
-                UPDATE users 
-                SET is_banned = TRUE, premium_until = CURRENT_TIMESTAMP, banned_at = CURRENT_TIMESTAMP, banned_reason = $1 
-                WHERE user_id = $2
-            ''', reason, str(user_id))
+            await conn.execute('''UPDATE users SET is_banned = TRUE, premium_until = CURRENT_TIMESTAMP, banned_at = CURRENT_TIMESTAMP, banned_reason = $1 WHERE user_id = $2''', reason, str(user_id))
             return True
-    except Exception as e:
-        logger.error(f"admin_kick_user error: {e}")
-        return False
+    except Exception as e: logger.error(f"admin_kick_user error: {e}"); return False
 
 async def admin_unban_user(user_id, days=30):
     try:
         async with await get_db() as conn:
-            await conn.execute('''
-                UPDATE users 
-                SET is_banned = FALSE, banned_at = NULL, banned_reason = NULL, premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval 
-                WHERE user_id = $2
-            ''', str(days), str(user_id))
+            await conn.execute('''UPDATE users SET is_banned = FALSE, banned_at = NULL, banned_reason = NULL, premium_until = CURRENT_TIMESTAMP + ($1 || ' days')::interval WHERE user_id = $2''', str(days), str(user_id))
             return True
-    except Exception as e:
-        logger.error(f"admin_unban_user error: {e}")
-        return False
+    except Exception as e: logger.error(f"admin_unban_user error: {e}"); return False
+
+# ==========================================
+# --- FUNGSI STREAK (API) & REMINDER ---
+# ==========================================
+async def update_streak(user_id):
+    try:
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT current_streak, last_streak_date FROM users WHERE user_id = $1", str(user_id))
+            if not row: return
+            
+            today = datetime.date.today()
+            last_date = row['last_streak_date']
+            
+            if last_date == today: return 
+                
+            new_streak = 1
+            if last_date == today - datetime.timedelta(days=1):
+                new_streak = (row['current_streak'] or 0) + 1
+                
+            await conn.execute("UPDATE users SET current_streak = $1, last_streak_date = $2 WHERE user_id = $3", new_streak, today, str(user_id))
+            logger.info(f"🔥 Streak user {user_id} naik jadi {new_streak}")
+    except Exception as e: logger.error(f"update_streak error: {e}")
+
+async def get_user_streak(user_id):
+    try:
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT current_streak, last_streak_date FROM users WHERE user_id = $1", str(user_id))
+            if not row: return 0
+            today = datetime.date.today()
+            if row['last_streak_date'] == today - datetime.timedelta(days=1) or row['last_streak_date'] == today:
+                return row['current_streak'] or 0
+            return 0 
+    except Exception as e: return 0
+
+async def get_users_for_reminder():
+    try:
+        async with await get_db() as conn:
+            # Ambil user yang reminder nyala, VIP, gak banned, 
+            # dan belum log makanan dalam 4 jam terakhir (biar gak spam)
+            rows = await conn.fetch('''
+                SELECT u.user_id FROM users u
+                WHERE u.reminder_enabled = TRUE AND u.is_banned = FALSE AND u.premium_until > CURRENT_TIMESTAMP
+                AND (
+                    NOT EXISTS (SELECT 1 FROM food_logs f WHERE f.user_id = u.user_id AND f.tanggal = CURRENT_DATE)
+                    OR 
+                    (SELECT MAX(waktu) FROM food_logs f WHERE f.user_id = u.user_id AND f.tanggal = CURRENT_DATE) < CURRENT_TIMESTAMP - INTERVAL '4 hours'
+                )
+            ''')
+            return [row['user_id'] for row in rows]
+    except Exception as e: 
+        logger.error(f"get_users_for_reminder error: {e}")
+        return []
+
+async def toggle_reminder(user_id):
+    try:
+        async with await get_db() as conn:
+            row = await conn.fetchrow("SELECT reminder_enabled FROM users WHERE user_id = $1", str(user_id))
+            if not row: return False
+            new_status = not row['reminder_enabled']
+            await conn.execute("UPDATE users SET reminder_enabled = $1 WHERE user_id = $2", new_status, str(user_id))
+            return new_status
+    except Exception as e: logger.error(f"toggle_reminder error: {e}"); return False

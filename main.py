@@ -7,7 +7,6 @@ from bot_instance import bot, dp
 from database.db import create_pool, setup_db, close_pool
 from api_server import app as fastapi_app 
 
-# IMPORT ROUTER
 from handlers import start as start_router
 from handlers import calorie as calorie_router
 from handlers import pt_chat as pt_chat_router
@@ -20,16 +19,16 @@ from handlers import voice as voice_router
 from handlers import barcode as barcode_router
 from handlers import premium as premium_router
 from handlers import admin as admin_router 
-from handlers import commands as commands_router # ✅ IMPORT ROUTER BARU
+from handlers import commands as commands_router
 from handlers import router as main_router 
 from services.ai import init_models
+from services.scheduler import start_scheduler # <--- TAMBAHAN
 from middlewares.premium_gate import PremiumGateMiddleware
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', handlers=[logging.FileHandler('bot.log', encoding='utf-8'), logging.StreamHandler()])
 logger = logging.getLogger(__name__) 
 
 async def set_bot_commands(bot: Bot):
-    # ✅ SEKARANG MENU SAMPING LENGKAP
     commands = [
         BotCommand(command="start", description="🏠 Menu Utama"),
         BotCommand(command="kalori", description="🍎 Catat Kalori & Gula"),
@@ -41,6 +40,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="pdf", description="📄 Laporan PDF"),
         BotCommand(command="stats", description="📊 Statistik"),
         BotCommand(command="myprogress", description="📊 Progres sepanjang masa"),
+        BotCommand(command="reminder", description="🔔 Pengingat Harian"),
         BotCommand(command="help", description="❓ Bantuan"),
         BotCommand(command="cancel", description="❌ Batalin Aksi"),
     ]
@@ -52,12 +52,13 @@ async def main():
     await setup_db()
     await init_models()
     await set_bot_commands(bot)
+    start_scheduler() # <--- NYALAIN SCHEDULER DISINI
     
     dp.message.middleware(PremiumGateMiddleware())
     dp.callback_query.middleware(PremiumGateMiddleware())
     
     dp.include_router(start_router.router)
-    dp.include_router(commands_router.router) # ✅ DAFTARIN DI SINI
+    dp.include_router(commands_router.router)
     dp.include_router(calorie_router.router)
     dp.include_router(pt_chat_router.router)
     dp.include_router(gym_router.router)

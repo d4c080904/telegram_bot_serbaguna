@@ -123,6 +123,12 @@ async def setup_db():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_banned ON users(is_banned) WHERE is_banned = TRUE")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_premium ON users(premium_until)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active_at)")
+        
         # =====================================================================
+        # --- FASE BARU: FITUR STREAK & REMINDER ---
+        # =====================================================================
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_streak_date DATE")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS reminder_enabled BOOLEAN DEFAULT TRUE")
         
         logger.info("✅ Semua tabel PostgreSQL siap")

@@ -91,6 +91,12 @@ async function refreshData() {
             document.getElementById('dashBatas').innerText = target;
             document.getElementById('dashSisa').innerText = target - (today.total_kalori_masuk - today.total_kalori_keluar);
         }
+        
+        // UPDATE WIDGET API (STREAK)
+        if (data.streak !== undefined) {
+            document.getElementById('dashStreak').innerText = data.streak;
+        }
+        
         renderCharts(data);
     } catch (err) { console.error(err); }
 }
