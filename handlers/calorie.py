@@ -8,7 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.queries import (
     get_gym_profile, get_total_makro_hari_ini, get_history_makanan_hari_ini, 
-    hapus_log_terakhir, save_wizard_state, delete_wizard_state,
+    hapus_log_terakhir, save_wizard_state, delete_wizard_state, get_wizard_state,
     tambah_workout_log, get_total_kalori_terbakar_hari_ini, get_history_workout_hari_ini
 )
 from utils.helpers import hitung_bmr_tdee
@@ -241,6 +241,12 @@ async def callback_kalori_history(callback: CallbackQuery):
 @router.message(F.photo)
 async def proses_foto_makanan(message: Message):
     user_id = str(message.from_user.id)
+
+    # GUARD: proses foto makanan hanya jika user memang sedang dalam mode scan makanan
+    state = await get_wizard_state(user_id, "waiting_food_photo")
+    if not state:
+        return  # biarkan handler lain (mis. equipment) yang menangani foto
+
     await delete_wizard_state(user_id, "waiting_food_photo")
     
     await message.bot.send_chat_action(message.chat.id, 'typing')
