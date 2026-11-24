@@ -242,10 +242,10 @@ async def callback_kalori_history(callback: CallbackQuery):
 async def proses_foto_makanan(message: Message):
     user_id = str(message.from_user.id)
 
-    # GUARD: proses foto makanan hanya jika user memang sedang dalam mode scan makanan
+    # GUARD: proses foto makanan hanya bila user sedang dalam mode "waiting_food_photo"
     state = await get_wizard_state(user_id, "waiting_food_photo")
     if not state:
-        return  # biarkan handler lain (mis. equipment) yang menangani foto
+        return  # tidak ada state, abaikan foto
 
     await delete_wizard_state(user_id, "waiting_food_photo")
     

@@ -55,14 +55,14 @@ async def callback_scan_alat(callback: CallbackQuery):
 # ----------------------------------------------------------------------
 # 2️⃣ Handler: proses foto alat gym
 # ----------------------------------------------------------------------
-@router.message(F.photo)  # <-- menangkap semua foto, tapi akan dilewatkan kalau bukan mode scan alat
+@router.message(F.photo)  # <-- menangkap semua foto, tapi akan dilewati kalau bukan mode scan alat
 async def proses_foto_alat(message: Message):
     user_id = str(message.from_user.id)
 
-    # GUARD: proses foto alat hanya jika user memang sedang dalam mode scan alat
+    # GUARD: proses foto alat hanya bila user sedang dalam mode scan alat
     state = await get_wizard_state(user_id, "waiting_equipment_photo")
     if not state:
-        return  # biarkan handler lain (mis. calorie) yang menangani foto
+        return  # tidak ada state, abaikan foto (biarkan handler lain yang menangani)
 
     # bersihkan wizard state yang lama
     await delete_wizard_state(user_id, "waiting_equipment_photo")
