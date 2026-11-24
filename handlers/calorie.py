@@ -238,6 +238,7 @@ async def callback_kalori_history(callback: CallbackQuery):
             await callback.message.answer(teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e: logger.error(f"kalori_history error: {e}")
 
+@router.message(F.photo)
 async def proses_foto_makanan(message: Message):
     user_id = str(message.from_user.id)
     await delete_wizard_state(user_id, "waiting_food_photo")
@@ -248,11 +249,26 @@ async def proses_foto_makanan(message: Message):
     try:
         file_id = message.photo[-1].file_id
         file_info = await message.bot.get_file(file_id)
+        
+        if not file_info:
+            await pesan_tunggu.edit_text("❌ Gagal mengambil file foto dari server Telegram.")
+            return
+            
         downloaded_file = await message.bot.download_file(file_info.file_path)
+        
+        if not downloaded_file:
+            await pesan_tunggu.edit_text("❌ Gagal mengunduh foto. Coba kirim ulang.")
+            return
+            
         image_bytes = downloaded_file.read()
+        
+        if not image_bytes or len(image_bytes) == 0:
+            await pesan_tunggu.edit_text("❌ Foto yang dikirim kosong atau rusak.")
+            return
         
         caption = message.caption or ""
         
+        # FIX: panggil fungsi core yang sudah benar
         result = await proses_foto_makanan_core(
             user_id=user_id,
             image_bytes=image_bytes,

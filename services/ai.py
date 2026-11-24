@@ -10,9 +10,13 @@ from utils.helpers import hitung_bmi, kategori_bmi
 logger = logging.getLogger(__name__)
 
 MODEL_GROQ_LIST = []
+
+# TAMBAHIN FALLBACK MODEL VISION LEBIH BANYAK
 MODEL_VISION_LIST = [
+    "meta-llama/llama-4-scout-17b-16e-instruct",
     "qwen/qwen3.8-27b",
-    "meta-llama/llama-4-scout-17b-16e-instruct"
+    "meta-llama/llama-3.2-11b-vision-preview",
+    "meta-llama/llama-3.2-90b-vision-preview"
 ]
 
 async def init_models():
@@ -93,16 +97,23 @@ async def analisis_foto_makanan(image_bytes, caption=""):
         {"type": "text", "text": prompt_text},
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
     ]
+    
+    # COBA SEMUA MODEL VISION SATU PER SATU
     for model_name in MODEL_VISION_LIST:
         try:
+            logger.info(f"Mencoba model vision: {model_name}")
             response = await groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": user_content}],
                 model=model_name, temperature=0.2, max_tokens=500, response_format={"type": "json_object"}
             )
-            return json.loads(response.choices[0].message.content.strip())
+            result = json.loads(response.choices[0].message.content.strip())
+            logger.info(f"✅ Vision sukses: {model_name}")
+            return result
         except Exception as e:
             logger.warning(f"Model Vision {model_name} gagal (makanan): {e}")
             continue
+    
+    logger.error("Semua model vision gagal menganalisis foto makanan")
     return None
 
 async def koreksi_foto_makanan(koreksi_user):
@@ -184,7 +195,6 @@ async def proses_voice_note(teks):
             continue
     return None
 
-# --- FITUR CHAT PT AI (DIPERBARUI UNTUK MARKDOWN) ---
 async def chat_dengan_pt(user_id, pesan_baru):
     history = await ambil_chat_history(user_id)
     user = await get_user_profile(user_id)
@@ -193,7 +203,6 @@ async def chat_dengan_pt(user_id, pesan_baru):
     if user:
         profil_str = f"User bernama {user['nama']}, BB {user['berat']}kg, TB {user['tinggi']}cm, Umur {user['umur']}th."
     
-    # ✅ PROMPT BARU: Menyuruh AI pakai Markdown biar rapi
     system_prompt = (
         f"Kamu adalah Personal Trainer (PT) AI profesional, ramah, dan suportif. {profil_str} "
         "Tugasmu adalah menjawab pertanyaan user seputar gym, latihan (workout), nutrisi, diet, dan motivasi. "
@@ -203,7 +212,7 @@ async def chat_dengan_pt(user_id, pesan_baru):
         "Kalau user nanya di luar topik fitness/kesehatan, tolak dengan halus dan arahkan kembali ke topik gym. "
         "ATURAN FORMAT: WAJIB gunakan format Markdown agar mudah dibaca. "
         "Gunakan **bold** untuk nama latihan, angka penting, atau poin utama. "
-        "Gunakan list (menggunakan tanda minus '- ') atau angka (1. 2. 3.) untuk daftar gerakan workout atau makanan. "
+        "Gunakan list (meng menggunakan tanda minus '- ') atau angka (1. 2. 3.) untuk daftar gerakan workout atau makanan. "
         "Berikan jarak (enter dua kali) antar paragraf agar tidak menumpuk. Boleh pakai emoji."
     )
     
@@ -252,7 +261,6 @@ async def analisis_teks_makanan(teks):
             continue
     return None
 
-# --- FITUR BARU: ESTIMASI KALORI OLAHRAGA ---
 async def estimasi_kalori_olahraga(teks_olahraga, berat_badan):
     prompt = f"""
     User berat {berat_badan} kg, mengetik catatan olahraga: "{teks_olahraga}"
