@@ -178,7 +178,7 @@ async def handler_gym(message: Message):
 async def proses_gym_wizard(message: Message, wizard: dict):
     user_id = str(message.from_user.id)
     teks = message.text.strip()
-    mode = wizard.get('mode')
+    mode = (wizard.get('data') or {}).get('mode')
     
     if mode == 'pro':
         parts = [p.strip().lower() for p in teks.split('|')]
