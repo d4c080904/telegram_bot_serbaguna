@@ -6,14 +6,14 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from keyboards.menus import (
-    buat_menu_utama, teks_menu_utama, 
+    buat_menu_utama, teks_menu_utama,
     tombol_kembali, buat_tombol_gender
 )
 from utils.state import set_onboarding_wizard, get_onboarding_wizard, clear_onboarding_wizard, clear_gym_wizard
 from database.queries import (
-    get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir, 
-    set_chat_mode, cek_status_vip, get_statistik_user, get_user_full_stats, 
-    get_user_streak, toggle_reminder
+    get_user_profile, save_user_profile, get_total_air_hari_ini, get_berat_terakhir,
+    set_chat_mode, cek_status_vip, get_statistik_user, get_user_full_stats,
+    get_user_streak, toggle_reminder, get_total_makro_hari_ini
 )
 from database.db import get_db
 from config import ADMIN_ID
@@ -27,21 +27,25 @@ async def buat_ringkasan_dashboard(user_id):
     air = await get_total_air_hari_ini(user_id)
     target_air = 2000
     persen = min((air / target_air) * 100, 100)
-    
+
     bar_length = 10
     filled = int(bar_length * persen / 100)
     bar = "🟦" * filled + "⬜" * (bar_length - filled)
-    
+
     berat_data = await get_berat_terakhir(user_id)
     berat_str = f"{berat_data[0]['berat']} kg" if berat_data else "Belum diisi"
-    
+
     streak = await get_user_streak(user_id)
-    
+
+    # Tambahan: total kalori harian
+    total_kalori, _ = await get_total_makro_hari_ini(user_id)
+
     return (
         "📊 <b>RINGKASAN HARI INI:</b>\n"
         f"🔥 Api (Streak): <b>{streak} Hari</b>\n"
         f"💧 Air: {bar} {int(persen)}% ({air}/{target_air} ml)\n"
         f"⚖️ Berat: {berat_str}\n"
+        f"🍽️ Kalori Harian: <b>{total_kalori}</b> kcal\n"
     )
 
 @router.message(Command("start", "menu"))
@@ -52,10 +56,10 @@ async def kirim_sambutan(message: Message, state: FSMContext):
         user_id = str(message.from_user.id)
         await set_chat_mode(user_id, False)
         await clear_gym_wizard(user_id)
-        
+
         is_vip_db = await cek_status_vip(user_id)
         is_admin = (user_id == str(ADMIN_ID))
-        is_vip = is_vip_db or is_admin 
+        is_vip = is_vip_db or is_admin
 
         if not is_vip:
             logger.info(f"User {user_id} bukan VIP, ngirim menu Minta Akses.")
@@ -71,7 +75,7 @@ async def kirim_sambutan(message: Message, state: FSMContext):
             return
 
         user = await get_user_profile(user_id)
-        
+
         if not user:
             logger.info(f"User {user_id} VIP tapi belum punya profil, masuk Onboarding.")
             await set_onboarding_wizard(user_id, 'nama', {})
@@ -110,12 +114,12 @@ async def cmd_help(message: Message):
             "<code>/reminder</code> — Pengingat harian\n"
             "<code>/cancel</code> — Batalin input yang lagi jalan"
         )
-        
+
         builder = InlineKeyboardBuilder()
         if not is_vip:
             builder.button(text="🔓 Minta Izin Akses", callback_data="req_access")
         builder.button(text="🔙 Kembali ke Menu Utama", callback_data="menu_utama")
-        
+
         await message.answer(teks, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e:
         logger.error(f"[cmd_help] error: {e}")
@@ -131,7 +135,7 @@ async def cmd_reminder(message: Message):
                 "🌅 08:00 (Sarapan)\n"
                 "☀️ 13:00 (Makan Siang)\n"
                 "🌙 20:00 (Makan Malam / Closing)\n\n"
-                "<i>(Kalau lu udah log makanan dalam 4 jam terakhir, bot bakal diem biar gak spam).</i>", 
+                "<i>(Kalau lu udah log makanan dalam 4 jam terakhir, bot bakal diem biar gak spam).</i>",
                 parse_mode="HTML"
             )
         else:
@@ -144,7 +148,7 @@ async def proses_onboarding(message: Message, wizard: dict):
     step = wizard['step']
     data = wizard['data']
     teks = message.text.strip()
-    
+
     if step == 'nama':
         data['nama'] = teks
         await set_onboarding_wizard(user_id, 'umur', data)
@@ -183,19 +187,19 @@ async def callback_gender(callback: CallbackQuery):
         await callback.answer()
         user_id = str(callback.from_user.id)
         wizard = await get_onboarding_wizard(user_id)
-        
+
         if not wizard or wizard['step'] != 'gender':
             await callback.message.answer("Sesi onboarding lu udah berakhir. Ketik /start lagi ya.")
             return
-            
+
         data = wizard['data']
         gender = "L" if callback.data == "onboard_gender_L" else "P"
-        
+
         await save_user_profile(user_id, data['nama'], data['umur'], data['berat'], data['tinggi'], gender)
         await clear_onboarding_wizard(user_id)
-        
+
         ringkasan = await buat_ringkasan_dashboard(user_id)
-        
+
         is_vip_db = await cek_status_vip(user_id)
         is_admin = (user_id == str(ADMIN_ID))
         is_vip = is_vip_db or is_admin
@@ -208,12 +212,12 @@ async def callback_gender(callback: CallbackQuery):
             return
 
         teks = f"✅ Mantap! Data lu udah disimpen.\n\nHalo <b>{data['nama']}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
-        
+
         try:
             await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
         except Exception:
             await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
-            
+
     except Exception as e:
         logger.error(f"[callback_gender] error: {e}")
 
@@ -225,21 +229,21 @@ async def callback_menu_utama(callback: CallbackQuery, state: FSMContext):
         user_id = str(callback.from_user.id)
         await set_chat_mode(user_id, False)
         await clear_gym_wizard(user_id)
-        
+
         user = await get_user_profile(user_id)
         nama = user['nama'] if user else "Bro"
-        
+
         ringkasan = await buat_ringkasan_dashboard(user_id)
-        
+
         is_vip_db = await cek_status_vip(user_id)
         is_admin = (user_id == str(ADMIN_ID))
         is_vip = is_vip_db or is_admin
 
         teks = f"Halo <b>{nama}</b>! 👋\n\n" + teks_menu_utama(ringkasan)
-        
-        try: 
+
+        try:
             await callback.message.edit_text(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
-        except Exception: 
+        except Exception:
             await callback.message.answer(teks, parse_mode="HTML", reply_markup=buat_menu_utama(user_id, WEBAPP_URL, is_vip))
     except Exception as e:
         logger.error(f"[menu_utama] error: {e}")
@@ -249,10 +253,10 @@ async def cmd_stats(message: Message):
     try:
         user_id = str(message.from_user.id)
         stats = await get_statistik_user(user_id)
-        
+
         teks = (
             "📊 <b>STATISTIK GYM LU</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "━━━━━━━━━━━━━━━━━━━\n\n"
             f"🍎 Log Makanan: <b>{stats['makanan']} kali</b>\n"
             f"💧 Log Air Minum: <b>{stats['air']} kali</b>\n"
             f"💪 Log Latihan: <b>{stats['gym']} kali</b>\n\n"
@@ -268,11 +272,11 @@ async def cmd_myprogress(message: Message):
         import datetime
         user_id = str(message.from_user.id)
         stats = await get_user_full_stats(user_id)
-        
+
         if not stats or stats['days_active'] == 0:
             await message.answer("📊 <b>Belum ada data progres</b>\n\nMulai catat makanan, air minum, atau latihan dulu ya.", parse_mode="HTML", reply_markup=tombol_kembali())
             return
-        
+
         weight_str = "Belum ada data"
         if stats['first_weight'] and stats['last_weight']:
             diff = stats['last_weight'] - stats['first_weight']
@@ -280,7 +284,7 @@ async def cmd_myprogress(message: Message):
             elif diff < 0: weight_str = f"{stats['first_weight']} → {stats['last_weight']} kg (🟢 {diff:.1f} kg)"
             else: weight_str = f"{stats['first_weight']} → {stats['last_weight']} kg (⚪ Stabil)"
         elif stats['last_weight']: weight_str = f"{stats['last_weight']} kg"
-            
+
         teks = (
             "📊 <b>PROGRES LU SEJAUH INI</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -290,7 +294,7 @@ async def cmd_myprogress(message: Message):
             f"💧 <b>AIR MINUM</b>\n   • Dicatat: <b>{stats['total_water']} kali</b>\n   • Total air: <b>{stats['total_water_ml']:,} ml</b>\n\n"
             f"🏋️ <b>LATIHAN</b>\n   • Dicatat: <b>{stats['total_workout']} kali</b>\n   • Total kalori terbakar: <b>{stats['total_burned']:,} kcal</b>\n\n"
             f"⚖️ <b>BERAT BADAN</b>\n   • {weight_str}\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\nTerus konsisten ya bro! 💪"
+            "━━━━━━━━━━━━━━━━━━━\nTerus konsisten ya bro! 💪"
         )
         await message.answer(teks, parse_mode="HTML", reply_markup=tombol_kembali())
     except Exception as e:
@@ -313,7 +317,7 @@ async def callback_menu_stats(callback: CallbackQuery):
         await callback.answer()
         teks = (
             "📊 <b>STATISTIK GYM LU</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "━━━━━━━━━━━━━━━━━━━\n\n"
             f"🍎 Log Makanan: <b>{stats['makanan']} kali</b>\n"
             f"💧 Log Air Minum: <b>{stats['air']} kali</b>\n"
             f"💪 Log Latihan: <b>{stats['gym']} kali</b>\n\n"
