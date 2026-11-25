@@ -26,11 +26,11 @@ async def send_reminder(context="malam"):
 
 def start_scheduler():
     # Jadwal Pagi (08:00)
-    scheduler.add_job(lambda: send_reminder("pagi"), CronTrigger(hour=8, minute=0))
+    scheduler.add_job(send_reminder, CronTrigger(hour=8, minute=0), args=["pagi"])
     # Jadwal Siang (13:00)
-    scheduler.add_job(lambda: send_reminder("siang"), CronTrigger(hour=13, minute=0))
+    scheduler.add_job(send_reminder, CronTrigger(hour=13, minute=0), args=["siang"])
     # Jadwal Malam (20:00)
-    scheduler.add_job(lambda: send_reminder("malam"), CronTrigger(hour=20, minute=0))
-    
+    scheduler.add_job(send_reminder, CronTrigger(hour=20, minute=0), args=["malam"])
+
     scheduler.start()
     logger.info("✅ Scheduler Reminder (Pagi, Siang, Malam) berhasil dijalankan")

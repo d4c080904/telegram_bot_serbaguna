@@ -215,8 +215,15 @@ async def proses_gym_wizard(message: Message, wizard: dict):
         hasil = await analisis_gym_pro(data_pro)
         
         if hasil:
-            try: await message.answer(hasil, parse_mode="HTML")
-            except Exception: await message.answer(strip_markdown(hasil))
+            # Split long messages to avoid Telegram 4096 char limit
+            if len(hasil) > 4096:
+                chunks = [hasil[i:i+4096] for i in range(0, len(hasil), 4096)]
+                for chunk in chunks:
+                    try: await message.answer(chunk, parse_mode="HTML")
+                    except Exception: await message.answer(strip_markdown(chunk))
+            else:
+                try: await message.answer(hasil, parse_mode="HTML")
+                except Exception: await message.answer(strip_markdown(hasil))
         else:
             await message.answer("❌ AI-nya lagi error. Coba lagi nanti ya.")
             
