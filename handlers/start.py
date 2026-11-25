@@ -21,7 +21,7 @@ from config import ADMIN_ID
 logger = logging.getLogger(__name__)
 router = Router()
 
-WEBAPP_URL = "https://fifth-twiddle-richly.ngrok-free.dev"
+WEBAPP_URL = "https://202.155.143.185"
 
 async def buat_ringkasan_dashboard(user_id):
     air = await get_total_air_hari_ini(user_id)
